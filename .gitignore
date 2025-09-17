@@ -1,0 +1,8 @@
+# Ignore every bin/ folder in the repo
+*/bin/
+
+# test codes
+*/test_code/
+
+#vscode stuff
+.vscode

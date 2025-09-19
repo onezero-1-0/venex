@@ -1,4 +1,3 @@
-
 import socket
 import threading
 import time
@@ -17,7 +16,9 @@ class C2Client:
         self.root = root
         self.root.title("C2 Server Client")
         self.root.geometry("800x600")
-        self.root.configure(bg="#2e2e2e")
+        
+        # Apply dark theme
+        self.setup_dark_theme()
         
         # Connection variables
         self.server_ip = tk.StringVar(value="127.0.0.1")
@@ -46,16 +47,56 @@ class C2Client:
         # Start processing GUI updates
         self.process_gui_updates()
 
+    def setup_dark_theme(self):
+        # Configure dark theme colors
+        self.bg_color = "#2e2e2e"
+        self.fg_color = "#ffffff"
+        self.entry_bg = "#3c3c3c"
+        self.button_bg = "#4a4a4a"
+        self.tree_bg = "#3c3c3c"
+        self.tree_fg = "#ffffff"
+        self.tree_selected = "#505050"
+        self.text_bg = "#3c3c3c"
+        self.text_fg = "#ffffff"
+        self.frame_bg = "#2e2e2e"
+        
+        # Apply to root window
+        self.root.configure(bg=self.bg_color)
+        
+        # Configure style
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+        
+        # Configure ttk styles
+        self.style.configure('.', background=self.bg_color, foreground=self.fg_color)
+        self.style.configure('TFrame', background=self.frame_bg)
+        self.style.configure('TLabel', background=self.frame_bg, foreground=self.fg_color)
+        self.style.configure('TButton', background=self.button_bg, foreground=self.fg_color)
+        self.style.configure('TEntry', fieldbackground=self.entry_bg, foreground=self.fg_color)
+        self.style.configure('TScrollbar', background=self.button_bg, troughcolor=self.bg_color)
+        self.style.configure('Treeview', 
+                            background=self.tree_bg, 
+                            foreground=self.tree_fg,
+                            fieldbackground=self.tree_bg)
+        self.style.map('Treeview', background=[('selected', self.tree_selected)])
+        self.style.configure('Treeview.Heading', 
+                            background=self.button_bg, 
+                            foreground=self.fg_color)
+        self.style.configure('TLabelframe', background=self.frame_bg, foreground=self.fg_color)
+        self.style.configure('TLabelframe.Label', background=self.frame_bg, foreground=self.fg_color)
+
     def setup_gui(self):
         # Connection frame
         connection_frame = ttk.Frame(self.root, padding="10")
         connection_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
         
         ttk.Label(connection_frame, text="Server IP:").grid(row=0, column=0, sticky=tk.W)
-        ttk.Entry(connection_frame, textvariable=self.server_ip, width=15).grid(row=0, column=1, sticky=tk.W)
+        ip_entry = ttk.Entry(connection_frame, textvariable=self.server_ip, width=15)
+        ip_entry.grid(row=0, column=1, sticky=tk.W)
         
         ttk.Label(connection_frame, text="Port:").grid(row=0, column=2, sticky=tk.W)
-        ttk.Entry(connection_frame, textvariable=self.server_port, width=10).grid(row=0, column=3, sticky=tk.W)
+        port_entry = ttk.Entry(connection_frame, textvariable=self.server_port, width=10)
+        port_entry.grid(row=0, column=3, sticky=tk.W)
         
         self.connect_btn = ttk.Button(connection_frame, text="Connect", command=self.toggle_connection)
         self.connect_btn.grid(row=0, column=4, padx=5)
@@ -83,7 +124,7 @@ class C2Client:
         tree_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         
         # Right-click menu for targets
-        self.target_menu = tk.Menu(self.root, tearoff=0)
+        self.target_menu = tk.Menu(self.root, tearoff=0, bg=self.button_bg, fg=self.fg_color)
         self.target_menu.add_command(label="Interact", command=self.interact_with_target)
         
         # Bind right-click to treeview
@@ -93,9 +134,10 @@ class C2Client:
         messages_frame = ttk.LabelFrame(self.root, text="Messages", padding="10")
         messages_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=5)
         
-        self.messages_text = scrolledtext.ScrolledText(messages_frame, width=70, height=15)
+        self.messages_text = scrolledtext.ScrolledText(messages_frame, width=70, height=15, 
+                                                     bg=self.text_bg, fg=self.text_fg,
+                                                     insertbackground=self.fg_color)
         self.messages_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
         
         # Command frame
         command_frame = ttk.Frame(self.root, padding="10")
@@ -136,7 +178,6 @@ class C2Client:
         # Configure main command frame
         command_frame.columnconfigure(0, weight=1)
 
-        
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
@@ -145,7 +186,6 @@ class C2Client:
         targets_frame.rowconfigure(0, weight=1)
         messages_frame.columnconfigure(0, weight=1)
         messages_frame.rowconfigure(0, weight=1)
-        #command_frame.columnconfigure(1, weight=1)
 
     def process_gui_updates(self):
         """Process all pending GUI updates from the queue"""
@@ -269,10 +309,6 @@ class C2Client:
             self.gui_queue.put((self.disconnect_from_server, ()))
 
     def process_message(self, message):
-
-        # if message.startswith("OUTPUT:"):
-        #     self.gui_queue.put((self.log_message, (f" {message}", "green")))
-        # else:
         self.gui_queue.put((self.log_message, (f"Received: {message}",)))
         
         # Check if this is a target registration message
@@ -379,8 +415,7 @@ class C2Client:
             for target_id in to_remove:
                 self.remove_target(target_id)
 
-    
-    def log_message(self, message, color="black"):
+    def log_message(self, message, color="white"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         
         # Configure tag for the specified color if it doesn't exist
@@ -394,7 +429,6 @@ class C2Client:
         self.messages_text.insert(tk.END, f"{message}\n", color)
         
         self.messages_text.see(tk.END)
-
 
     def __del__(self):
         self.connected = False

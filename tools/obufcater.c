@@ -1,71 +1,176 @@
 #include <stdio.h>
-#include <stdint.h>
-#include <string.h>
+#include <stdlib.h>
+#include <windows.h>
+
+#define COLOR_RED     "\x1b[31m"
+#define COLOR_GREEN   "\x1b[32m"
+#define COLOR_GOLDEN_YELLOW "\x1b[38;5;214m"
+#define COLOR_RESET   "\x1b[0m"
 
 extern void* chacha20_Full(void* message, void* out_message, int length);
 
-int match_pattern(const unsigned char* buf, int len) {
-    // Check fixed bytes only — skip index 8 (wildcard)
-    if (len < 13) return 0;
 
-    if (buf[0] != 0x41) return 0; 
-    if (buf[1] != 0x5a) return 0;
-    if (buf[2] != 0x49) return 0;
-    if (buf[3] != 0x83) return 0;
-    if (buf[4] != 0xc2) return 0;
-    if (buf[5] != 0x11) return 0;
-    if (buf[6] != 0x41) return 0;
-    if (buf[7] != 0xbd) return 0;
-    // buf[8] = wildcard (any)
-    if (buf[9] != 0x00) return 0;
-    if (buf[10] != 0x00) return 0;
-    if (buf[11] != 0x00) return 0;
-    if (buf[12] != 0xe8) return 0;
-
-    return 1; // matched
+// Function to search for a pattern with wildcards (0x00 = any byte)
+int search_pattern(const unsigned char* buffer, size_t buffer_size, 
+                  const unsigned char* pattern, const unsigned char* mask, 
+                  size_t pattern_size, size_t start_index) {
+    for (size_t i = start_index; i <= buffer_size - pattern_size; i++) {
+        int found = 1;
+        for (size_t j = 0; j < pattern_size; j++) {
+            // If mask is 0xFF, we require exact match
+            // If mask is 0x00, any byte is acceptable
+            if (mask[j] == 0xFF && buffer[i + j] != pattern[j]) {
+                found = 0;
+                break;
+            }
+        }
+        if (found) {
+            return (int)i;
+        }
+    }
+    return -1;
 }
 
+int obufcating_buffer(char *buffer, int fileSize){
+    // First pattern: 4C 8D 15 00 00 00 00 41 BD 00 00 00 00 E8 00 00 00 00
+    unsigned char pattern1[] = {
+        0x4C, 0x8D, 0x15, 0x00, 0x00, 0x00, 0x00, 
+        0x41, 0xBD, 0x00, 0x00, 0x00, 0x00, 
+        0xE8, 0x00, 0x00, 0x00, 0x00
+    };
+    
+    unsigned char mask1[] = {
+        0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+        0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+        0xFF, 0x00, 0x00, 0x00, 0x00
+    };
+    size_t pattern1_size = sizeof(pattern1);
 
-int main(){
-    FILE* file = fopen("../../gostInit/bin/core.bin", "rb");
-    if (!file) {
-        perror("[-] Failed to open .bin");
+    // Second pattern: 4C 8D 15 00 00 00 00 49 83 EA 00 41 BD 00 00 00 00 E8 00 00 00 00
+    unsigned char pattern2[] = {
+        0x4C, 0x8D, 0x15, 0x00, 0x00, 0x00, 0x00,
+        0x49, 0x83, 0xEA, 0x00,
+        0x41, 0xBD, 0x00, 0x00, 0x00, 0x00,
+        0xE8, 0x00, 0x00, 0x00, 0x00
+    };
+    
+    unsigned char mask2[] = {
+        0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+        0xFF, 0xFF, 0xFF, 0x00,
+        0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+        0xFF, 0x00, 0x00, 0x00, 0x00
+    };
+    size_t pattern2_size = sizeof(pattern2);
+
+    int scaning_pos = 0;
+
+    while(TRUE){
+
+            // Search for first pattern
+        int pos1 = search_pattern(buffer, fileSize, pattern1, mask1, pattern1_size, scaning_pos);
+        if (pos1 == -1) {
+            printf(COLOR_GOLDEN_YELLOW "Warning: Not pattern1 Found!\n" COLOR_RESET);
+            return 1;
+        }
+        // Search for second pattern after first pattern
+        int pos2 = search_pattern(buffer, fileSize, pattern2, mask2, pattern2_size, pos1 + pattern1_size);
+        if (pos2 == -1) {
+            printf(COLOR_RED "Error: Not pattern2 Found!\n" COLOR_RESET);
+            return -1;
+        }
+        scaning_pos = pos2 + pattern1_size;
+
+        // Calculate byte count between patterns
+        int byte_count = pos2 - (pos1 + pattern1_size);
+
+        chacha20_Full(&buffer[pos1 + pattern1_size], &buffer[pos1 + pattern1_size], byte_count);
+
+        printf(COLOR_GREEN "* %d Bytes was De/Obufcated\n" COLOR_RESET, byte_count);
+
+        // Check bounds before each memcpy
+        if (pos1 + 9 + sizeof(DWORD) > fileSize) {
+            fprintf(stderr, COLOR_RED "Error: pos1+9 out of bounds\n" COLOR_RESET);
+            return -1;
+        }
+        if (pos2 + 10 + sizeof(BYTE) > fileSize) {
+            fprintf(stderr, COLOR_RED "Error: pos2+10 out of bounds\n" COLOR_RESET);
+            return -1;
+        }
+        if (pos2 + 13 + sizeof(DWORD) > fileSize) {
+            fprintf(stderr, COLOR_RED "Error: pos2+13 out of bounds\n" COLOR_RESET);
+            return -1;
+        }
+
+        //coping bytes into buffer
+        memcpy(&buffer[pos1+9], &byte_count, sizeof(DWORD));
+        memcpy(&buffer[pos2+10], &byte_count, sizeof(BYTE));
+        memcpy(&buffer[pos2+13], &byte_count, sizeof(DWORD));
     }
 
-    unsigned char file_buffer[7000];
-    unsigned char write_buffer[7000];
-    size_t bytes_read = fread(file_buffer, 1, sizeof(file_buffer), file);
-    fseek(file, 0, SEEK_SET);
-     size_t bytes_read2 = fread(write_buffer, 1, sizeof(write_buffer), file);
-    fclose(file);
+}
 
-    if (bytes_read == 0) {
-        fprintf(stderr, "[-] No bytes read from file, nothing to write\n");
+int main(int argc, char* argv[]) {
+
+    if (argc != 2) {
+        printf(COLOR_RED "Usage: %s <filename>\n" COLOR_RESET, argv[0]);
         return 1;
     }
 
+    printf(COLOR_GOLDEN_YELLOW "Warning: This Tool can be used for obufcation and unobufcation too if you accidently run two time it in file was UnObufcated\n" COLOR_RESET);
 
-    for(int i=0; i < bytes_read; i++){
-        if (match_pattern(&file_buffer[i], 13) == 1) {
-            chacha20_Full(&write_buffer[i+17], &write_buffer[i+17], (int)write_buffer[i+8]);
-            printf("Encrypted %d bytes\n",file_buffer[i+8]);
-        }
-        
-    }
+    const char* filename = argv[1];
 
-    // for(int j = 0; j < bytes_read; j++){
-    //     printf("%c",file_buffer[j]);
-    // }
-
-    file = fopen("../../gostInit/bin/core.bin", "wb");
+    FILE* file = fopen(argv[1], "rb+");
     if (!file) {
-        perror("[-] Failed to open .bin");
+        printf(COLOR_RED "Error: Cannot open file %s\n" COLOR_RESET, argv[1]);
+        return 1;
     }
 
-    size_t bytes_written = fwrite(write_buffer, 1, bytes_read, file);
-    fclose(file);
-    if (bytes_written != bytes_read) {
-        perror("[-] Failed to write all bytes");
+    fseek(file, 0, SEEK_END);
+    long fileSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    unsigned char* buffer = (unsigned char*)malloc(fileSize);
+    if (!buffer) {
+        printf(COLOR_RED "Error: Memory allocation failed\n" COLOR_RESET);
+        fclose(file);
+        return 1;
     }
-    printf("[+] File overwritten successfully\n");
+
+    if (fread(buffer, 1, fileSize, file) != fileSize) {
+        printf(COLOR_RED "Error: Cannot read file\n" COLOR_RESET);
+        free(buffer);
+        fclose(file);
+        return 1;
+    }
+
+    printf("File size: %lu bytes\n", fileSize);
+
+    //obucating
+    printf("\nStarting De/Obufcating ...\n");
+    int obfResult = obufcating_buffer(buffer, fileSize);
+
+    if(obfResult == -1){
+        printf(COLOR_RED "Error: This can be huge mistake you put obufcation but you did not put end obufcation\n" COLOR_RESET);
+        free(buffer);
+        fclose(file);
+        return 1;
+    }
+    printf("Finished De/Obufcatiob\n\n");
+
+    //point to file begin
+    rewind(file);
+
+    if (fwrite(buffer, 1, fileSize, file) != fileSize) {
+        printf(COLOR_RED "Error: Cannot read file\n" COLOR_RESET);
+        free(buffer);
+        fclose(file);
+        return 1;
+    }
+
+    fclose(file);
+
+
+    free(buffer);
+    return 0;
 }

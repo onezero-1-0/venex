@@ -272,7 +272,6 @@ class C2Client:
         # if message.startswith("OUTPUT:"):
         #     self.gui_queue.put((self.log_message, (f" {message}", "green")))
         # else:
-        self.gui_queue.put((self.log_message, (f"Received: {message}",)))
         
         # Check if this is a target registration message
         if message.startswith("TARGET:"):
@@ -287,6 +286,8 @@ class C2Client:
             if len(parts) >= 2:
                 target_id = parts[1].strip()
                 self.update_target(target_id)
+        else:
+            self.gui_queue.put((self.log_message, (f"Received: {message}",)))
 
     def add_target(self, target_id):
         with self.target_lock:

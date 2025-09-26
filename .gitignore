@@ -1,0 +1,20 @@
+# Ignore every bin/ folder in the repo
+*/bin/
+
+# test codes
+*/test_code/
+testing*
+
+#vscode stuff
+.vscode
+
+# ignore on version 0.5v
+tools/gostmsf.c
+server/server_Linux.c
+modules/wls.asm
+modules/wpwd.asm
+gostinit/core/core_delay.asm
+gostinit/core/core_test.asm
+gostinit/core/core_x64.c
+C2Client/clientD.py
+C2Client/clientL.py

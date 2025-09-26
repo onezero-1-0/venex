@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 from datetime import datetime, timedelta
 from queue import Queue
+import re
 
 RED = "\033[31m"
 GREEN = "\033[32m"
@@ -14,11 +15,12 @@ RESET = "\033[0m"
 class C2Client:
     def __init__(self, root):
         self.root = root
-        self.root.title("C2 Server Client")
-        self.root.geometry("800x600")
+        self.root.title("Venex C2 Server Client")
+        self.root.geometry("1000x700")
         
-        # Apply dark theme
-        self.setup_dark_theme()
+        # Theme variables
+        self.dark_mode = True
+        self.setup_theme()
         
         # Connection variables
         self.server_ip = tk.StringVar(value="127.0.0.1")
@@ -47,28 +49,33 @@ class C2Client:
         # Start processing GUI updates
         self.process_gui_updates()
 
-    def setup_dark_theme(self):
-        self.bg_color = "#252525"         # almost black background
-        self.fg_color = "#e6e6e6"         # light gray text
-        self.entry_bg = "#1a1a1a"         # darker entry fields
-        self.button_bg = "#262626"        # dark buttons
-        self.tree_bg = "#1f1f1f"          # darker treeview background
-        self.tree_fg = "#e6e6e6"          # light gray tree text
-        self.tree_selected = "#D3362B"    # selected row slightly lighter
-        self.text_bg = "#1a1a1a"          # dark text area background
-        self.text_fg = "#e6e6e6"          # light text color
-        self.frame_bg = "#252525"         # dark frame background
-
-        # self.bg_color = "#ffffff"         # main background
-        # self.fg_color = "#000000"         # main text color
-        # self.entry_bg = "#f0f0f0"         # entry fields background
-        # self.button_bg = "#e0e0e0"        # buttons background
-        # self.tree_bg = "#ffffff"          # treeview background
-        # self.tree_fg = "#000000"          # treeview text color
-        # self.tree_selected = "#c53d3d"    # selected row highlight
-        # self.text_bg = "#f5f5f5"          # text area background
-        # self.text_fg = "#000000"          # text area color
-        # self.frame_bg = "#f7f7f7"         # frame background
+    def setup_theme(self):
+        if self.dark_mode:
+            # Dark theme colors
+            self.bg_color = "#252525"         # almost black background
+            self.fg_color = "#e6e6e6"         # light gray text
+            self.entry_bg = "#1a1a1a"         # darker entry fields
+            self.button_bg = "#262626"        # dark buttons
+            self.tree_bg = "#1f1f1f"          # darker treeview background
+            self.tree_fg = "#e6e6e6"          # light gray tree text
+            self.tree_selected = "#D3362B"    # selected row slightly lighter
+            self.text_bg = "#1a1a1a"          # dark text area background
+            self.text_fg = "#e6e6e6"          # light text color
+            self.frame_bg = "#252525"         # dark frame background
+            self.data_color = "#22DD22"
+        else:
+            # Light theme colors
+            self.bg_color = "#ffffff"         # main background
+            self.fg_color = "#000000"         # main text color
+            self.entry_bg = "#f0f0f0"         # entry fields background
+            self.button_bg = "#e0e0e0"        # buttons background
+            self.tree_bg = "#ffffff"          # treeview background
+            self.tree_fg = "#000000"          # treeview text color
+            self.tree_selected = "#c53d3d"    # selected row highlight
+            self.text_bg = "#f5f5f5"          # text area background
+            self.text_fg = "#000000"          # text area color
+            self.frame_bg = "#f7f7f7"         # frame background
+            self.data_color = "#002BB8"
         
         # Apply to root window
         self.root.configure(bg=self.bg_color)
@@ -95,7 +102,34 @@ class C2Client:
         self.style.configure('TLabelframe', background=self.frame_bg, foreground=self.fg_color)
         self.style.configure('TLabelframe.Label', background=self.frame_bg, foreground=self.fg_color)
 
+    def toggle_theme(self):
+        """Toggle between dark and light mode"""
+        self.dark_mode = not self.dark_mode
+        self.setup_theme()
+        self.refresh_widget_colors()
+
+    def refresh_widget_colors(self):
+        """Refresh widget colors after theme change"""
+        # Refresh messages text widgets
+        self.messages_text.config(bg=self.text_bg, fg=self.text_fg, insertbackground=self.fg_color)
+        self.data_messages_text.config(bg=self.text_bg, fg=self.data_color, insertbackground=self.data_color)
+        
+        # Refresh target menu
+        self.target_menu.config(bg=self.button_bg, fg=self.fg_color)
+
     def setup_gui(self):
+        # Main container with left and right panes
+        main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        main_paned.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=5)
+
+        # Left frame (Targets and Connection info) - larger
+        left_frame = ttk.Frame(main_paned)
+        main_paned.add(left_frame, weight=1)  # Larger weight = more space
+
+        # Right frame (Data messages) - very small
+        right_frame = ttk.Frame(main_paned)
+        main_paned.add(right_frame, weight=1)  # Smaller weight = less space
+        
         # Connection frame
         connection_frame = ttk.Frame(self.root, padding="10")
         connection_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
@@ -111,9 +145,13 @@ class C2Client:
         self.connect_btn = ttk.Button(connection_frame, text="Connect", command=self.toggle_connection)
         self.connect_btn.grid(row=0, column=4, padx=5)
         
-        # Targets frame
-        targets_frame = ttk.LabelFrame(self.root, text="Connected Targets", padding="10")
-        targets_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=5)
+        # Theme toggle button
+        self.theme_btn = ttk.Button(connection_frame, text="☀️", command=self.toggle_theme, width=3)
+        self.theme_btn.grid(row=0, column=5, padx=5)
+        
+        # Targets frame (Left side)
+        targets_frame = ttk.LabelFrame(left_frame, text="Connected Targets", padding="10")
+        targets_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5), pady=5)
         
         # Treeview for targets
         columns = ("target_id", "last_seen", "status")
@@ -133,25 +171,27 @@ class C2Client:
         self.targets_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         tree_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
         
-        # Right-click menu for targets
-        self.target_menu = tk.Menu(self.root, tearoff=0, bg=self.button_bg, fg=self.fg_color)
-        self.target_menu.add_command(label="Interact", command=self.interact_with_target)
+        # Messages frame (Left side - for connection and target messages)
+        data_messages_frame = ttk.LabelFrame(left_frame, text="Data Messages", padding="10")
+        data_messages_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5), pady=5)
         
-        # Bind right-click to treeview
-        self.targets_tree.bind("<Button-3>", self.show_target_menu)
+        self.data_messages_text = scrolledtext.ScrolledText(data_messages_frame, width=70, height=15, 
+                                                     bg=self.text_bg, fg=self.data_color,
+                                                     insertbackground=self.data_color)
+        self.data_messages_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Messages frame
-        messages_frame = ttk.LabelFrame(self.root, text="Messages", padding="10")
-        messages_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=5)
+        # # Data Messages frame (Right side - for DATA messages only)
+        messages_frame = ttk.LabelFrame(right_frame, text="Connection Messages", padding="10")
+        messages_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0), pady=5)
         
-        self.messages_text = scrolledtext.ScrolledText(messages_frame, width=70, height=15, 
-                                                     bg=self.text_bg, fg=self.text_fg,
-                                                     insertbackground=self.fg_color)
+        self.messages_text = scrolledtext.ScrolledText(messages_frame, width=30, height=20, 
+                                                          bg=self.text_bg, fg=self.text_fg,
+                                                          insertbackground=self.fg_color)
         self.messages_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        # Command frame
+        # Command frame (Bottom - spans both columns)
         command_frame = ttk.Frame(self.root, padding="10")
-        command_frame.grid(row=4, column=0, sticky=(tk.W, tk.E))
+        command_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
 
         # Mode row frame
         mode_frame = ttk.Frame(command_frame)
@@ -187,15 +227,34 @@ class C2Client:
 
         # Configure main command frame
         command_frame.columnconfigure(0, weight=1)
-
-        # Configure grid weights
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=1)
-        self.root.rowconfigure(2, weight=1)
+        
+        # Configure grid weights for left and right frames
+        left_frame.columnconfigure(0, weight=1)
+        left_frame.rowconfigure(0, weight=1)
+        left_frame.rowconfigure(1, weight=1)
+        
+        right_frame.columnconfigure(0, weight=1)
+        right_frame.rowconfigure(0, weight=1)
+        
         targets_frame.columnconfigure(0, weight=1)
         targets_frame.rowconfigure(0, weight=1)
+        
+        data_messages_frame.columnconfigure(0, weight=1)
+        data_messages_frame.rowconfigure(0, weight=1)
+        
         messages_frame.columnconfigure(0, weight=1)
         messages_frame.rowconfigure(0, weight=1)
+
+        # Configure main window grid weights
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(1, weight=1)
+
+        # Right-click menu for targets
+        self.target_menu = tk.Menu(self.root, tearoff=0, bg=self.button_bg, fg=self.fg_color)
+        self.target_menu.add_command(label="Interact", command=self.interact_with_target)
+        
+        # Bind right-click to treeview
+        self.targets_tree.bind("<Button-3>", self.show_target_menu)
 
     def process_gui_updates(self):
         """Process all pending GUI updates from the queue"""
@@ -319,9 +378,7 @@ class C2Client:
         if self.connected:
             self.gui_queue.put((self.disconnect_from_server, ()))
 
-
     def process_message(self, message):
-        
         # Check if this is a target registration message
         if message.startswith("TARGET:"):
             # Extract target ID from previous command
@@ -333,7 +390,8 @@ class C2Client:
             lines = message.split("\n")  # split into all lines
             for line in lines:
                 if line.strip():  # optional: skip empty lines
-                    self.gui_queue.put((self.log_message, (f" $$-> {line}", False, "#22DD22",)))
+                    clean_line = re.sub(r'\s+$', '', line)
+                    self.gui_queue.put((self.log_data_message, (f" $$-> {clean_line}",)))
         else:
             self.gui_queue.put((self.log_message, (f"Received: {message}",)))
 
@@ -427,21 +485,18 @@ class C2Client:
             for target_id in to_remove:
                 self.remove_target(target_id)
 
-    def log_message(self, message, times=True, color="white"):
-        
-        # Configure tag for the specified color if it doesn't exist
-        if color not in self.messages_text.tag_names():
-            self.messages_text.tag_configure(color, foreground=color)
-
-        # Insert timestamp in default color
-        if times:
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            self.messages_text.insert(tk.END, f"[{timestamp}] ")
-        
-        # Insert message with specified color
-        self.messages_text.insert(tk.END, f"{message}\n", color)
-        
+    def log_message(self, message):
+        """Log general messages to the left message window"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.messages_text.insert(tk.END, f"[{timestamp}] {message}\n")
         self.messages_text.see(tk.END)
+
+    def log_data_message(self, message):
+        """Log DATA messages to the right message window"""
+        # Configure tag for the specified color if it doesn't exist
+
+        self.data_messages_text.insert(tk.END, f"{message}\n")
+        self.data_messages_text.see(tk.END)
 
     def __del__(self):
         self.connected = False

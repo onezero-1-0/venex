@@ -1,4 +1,7 @@
-# Venex v0.5 — README (Test Version)
+<h1 align="center"> VENEX C2 v0.5 — (Test Version) </h1>
+
+<div align="center"> <img width="300" height="300" alt="venex-modified" src="https://github.com/user-attachments/assets/be2ec9ea-fac7-4896-896b-b75fcb38ce31" /> </div>
+<br>
 
 > **Warning:** This is an early/test release. Use only in controlled lab environments/Ctfs. Linux gost is currently available with limited stealth features. **Not for production use.**
 
@@ -103,5 +106,5 @@ Please avoid submitting payloads or tooling that would enable uncontrolled distr
 ## License & Contact
 
 Not yet licensed — project is still in development. Public forks are allowed on GitHub.
----
+
 

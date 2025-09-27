@@ -9,8 +9,10 @@
 
 **Venex** is a C2 framework (v0.5) for creating and managing modules, shellcode, and encrypted payloads. It supports team collaboration using a server–client architecture. This early release provides a minimal toolset for building, obfuscating, and distributing small payload modules. Some functionality is intentionally limited while the project is under development.
 
-## Quick facts
+**Installation Guide:** For full installation steps, see [Installation Guide](docs/INSTALL.md).
 
+## Quick facts
+* Attack Vector: Windows (C2 server and tools run on Windows; client is Python-based and cross-platform. Linux support come in future updates)
 * Target: Linux x86_64 (core, dropper, loader currently for Linux)
 * Module size limit: **< 512 bytes** (1024 is posible but recomended under 512)
 * Encryption: ChaCha20 (used by `encrypt.exe`)
@@ -81,6 +83,19 @@ call rbp               ; call final function address
 * Test modules thoroughly in a sandbox or isolated network before any remote execution.
 * Use `hash.exe` to compute syscall hashes consistently across builds.
 * `gostmsf.exe` will eventually provide an opinionated build flow to combine obfuscation + encryption + module packaging in one step.
+
+## System Requirements
+
+* **Attack Vector (C2 Infrastructure)**:
+  - **C2 Server**: Runs on Windows (`server.exe` in `/server`).
+  - **Tools**: `encrypt.exe`, `obfuscater.exe`, and `hash.exe` in `/tools` are Windows executables.
+  - **Client**: Python-based (`/C2Client`), cross-platform (Windows, Linux, macOS with Python 3).
+* **Target (Malware)**:
+  - **Operating System**: Linux x86_64.
+  - **Components**: `gostinit` (dropper/loader) and modules (e.g., `x.bin`) are built for Linux.
+* **Build Environment**:
+  - Windows: For building tools and server (using `make` with MinGW/MSYS or compatible).
+  - Linux: Required for linking `gostinit` loader (ELF binary).
 
 ## Security & Ethics
 

@@ -508,10 +508,10 @@ gostEncrypt:
 	;setup state with key and iv
     lea r8,[rel chacha20_state]
     lea r9,[rel chacha20_key]
-    call chacha20_setupkey32
+    call chacha20_init_256
     lea r8,[rel chacha20_state]
     lea r9,[rel chacha20_nonce]
-    call chacha20_setupiv
+    call chacha20_set_iv
 
     ;decrypt
     lea r8,[rel chacha20_state]
@@ -519,7 +519,7 @@ gostEncrypt:
     mov r10,r10
     mov r11,r13
 	push r10
-    call chacha20_encrypt
+    call chacha20_process
 	pop r10
 	pop r12
 	pop r11
@@ -668,117 +668,121 @@ api_table:
 ;=======================DATA==========
 
 ;=================CHACHA20=================
-chacha20_QuarterRound:
-	; z1
+
+;==============
+; ChaCha20 implementation
+; Based on public domain ChaCha20 specification
+chacha20_QR:
+	; Step 1
 	add eax, ebx
 	xor edx, eax
 	rol edx, 16
 
-	; z2
+	; Step 2
 	add ecx, edx
 	xor ebx, ecx
 	rol ebx, 12
 
-	; z3
+	; Step 3
 	add eax, ebx
 	xor edx, eax
 	rol edx, 8
 
-	; z0
+	; Step 4
 	add ecx, edx
 	xor ebx, ecx
 	rol ebx, 7
 
 	ret
 
-; This function performs the doubleround function
-; It assumes that rdi points to the start of an array of 16 input dwords
-; This function modifies rax, rbx, rcx, rdx, rsi
-; The results are stored in-place
-chacha20_DoubleRound:
-	; z0, z4, z8, z12
+; Performs double round operation
+; Input: rdi points to 16 dword array
+; Modifies: rax, rbx, rcx, rdx, rsi
+; Output: modified in-place
+chacha20_DR:
+	; First column
 	mov eax, [rdi+4*0]
 	mov ebx, [rdi+4*4]
 	mov ecx, [rdi+4*8]
 	mov edx, [rdi+4*12]
-	call chacha20_QuarterRound
+	call chacha20_QR
 	mov [rdi+4*0], eax
 	mov [rdi+4*4], ebx
 	mov [rdi+4*8], ecx
 	mov [rdi+4*12], edx
 	
-	; z1, z5, z9, z13
+	; Second column
 	mov eax, [rdi+4*1]
 	mov ebx, [rdi+4*5]
 	mov ecx, [rdi+4*9]
 	mov edx, [rdi+4*13]
-	call chacha20_QuarterRound
+	call chacha20_QR
 	mov [rdi+4*1], eax
 	mov [rdi+4*5], ebx
 	mov [rdi+4*9], ecx
 	mov [rdi+4*13], edx
 	
-	; z2, z6, z10, z14
+	; Third column
 	mov eax, [rdi+4*2]
 	mov ebx, [rdi+4*6]
 	mov ecx, [rdi+4*10]
 	mov edx, [rdi+4*14]
-	call chacha20_QuarterRound
+	call chacha20_QR
 	mov [rdi+4*2], eax
 	mov [rdi+4*6], ebx
 	mov [rdi+4*10], ecx
 	mov [rdi+4*14], edx
 	
-	; z3, z7, z11, z15
+	; Fourth column
 	mov eax, [rdi+4*3]
 	mov ebx, [rdi+4*7]
 	mov ecx, [rdi+4*11]
 	mov edx, [rdi+4*15]
-	call chacha20_QuarterRound
+	call chacha20_QR
 	mov [rdi+4*3], eax
 	mov [rdi+4*7], ebx
 	mov [rdi+4*11], ecx
 	mov [rdi+4*15], edx
 
-	; z0, z5, z10, z15
+	; Diagonal 1
 	mov eax, [rdi+4*0]
 	mov ebx, [rdi+4*5]
 	mov ecx, [rdi+4*10]
 	mov edx, [rdi+4*15]
-	call chacha20_QuarterRound
+	call chacha20_QR
 	mov [rdi+4*0], eax
 	mov [rdi+4*5], ebx
 	mov [rdi+4*10], ecx
 	mov [rdi+4*15], edx
 
-	; z1, z6, z11, z12
+	; Diagonal 2
 	mov eax, [rdi+4*1]
 	mov ebx, [rdi+4*6]
 	mov ecx, [rdi+4*11]
 	mov edx, [rdi+4*12]
-	call chacha20_QuarterRound
+	call chacha20_QR
 	mov [rdi+4*1], eax
 	mov [rdi+4*6], ebx
 	mov [rdi+4*11], ecx
 	mov [rdi+4*12], edx
 
-	; z2, z7, z8, z13
+	; Diagonal 3
 	mov eax, [rdi+4*2]
 	mov ebx, [rdi+4*7]
 	mov ecx, [rdi+4*8]
 	mov edx, [rdi+4*13]
-	call chacha20_QuarterRound
+	call chacha20_QR
 	mov [rdi+4*2], eax
 	mov [rdi+4*7], ebx
 	mov [rdi+4*8], ecx
 	mov [rdi+4*13], edx
 
-	; z3, z4, z9, z14
+	; Diagonal 4
 	mov eax, [rdi+4*3]
 	mov ebx, [rdi+4*4]
 	mov ecx, [rdi+4*9]
 	mov edx, [rdi+4*14]
-	call chacha20_QuarterRound
+	call chacha20_QR
 	mov [rdi+4*3], eax
 	mov [rdi+4*4], ebx
 	mov [rdi+4*9], ecx
@@ -786,43 +790,40 @@ chacha20_DoubleRound:
 
 	ret
 
-; This function performs the salsa20 hash function
-; It assumes that esi points to the start of an array of 16 input dwords,
-; that edi points to the start of an array of 16 output dwords and that the output
-; dwords are initially a copy of the input dwords
-; This function modifies eax, ebx, ecx, edx and uses the stack
-; The results are stored in-place, the input dwords are not modified
-chacha20_hash:
+; ChaCha20 core hash function
+; Input: rsi - source 16 dword array, rdi - destination 16 dword array
+; Modifies: rax, rbx, rcx, rdx, stack
+; Output: result stored in destination
+chacha20_core:
 	push rbp
 	
-	; Run the double rounds on the output (the copy of inputs)
+	; Process rounds on output
 	push rsi
 	mov rbp, 10
-.roundLoop: 
-	call chacha20_DoubleRound
+.round_iter: 
+	call chacha20_DR
 	dec rbp
-	jnz .roundLoop
+	jnz .round_iter
 	pop rsi
 	
-	; Add back inputs to outputs
+	; Combine with original input
 	mov rcx, 15
-.addLoop: 
+.combine_loop: 
 	mov edx, [rsi+4*rcx]
 	add [rdi+4*rcx], edx
 	dec rcx
-	jge .addLoop
+	jge .combine_loop
 	
 	pop rbp
 	ret
 
 
 
-; This function performs a salsa20 expansion of a 32-byte key (256 bits)
-; Assumes that r8 points to a 32-byte key, and r9 points to a 16-byte nounce
-; Assumes that rsi points to the destination buffer
-; This function modifies rdi
-chacha20_expand32:
-	lea rdi, [rel chacha20_sigma]
+; Expands 32-byte key into ChaCha20 state
+; Input: r8 - 32-byte key, r9 - 16-byte nonce, rsi - destination
+; Modifies: rdi
+chacha20_expand_256:
+	lea rdi, [rel chacha20_constants_256]
 	
 	push rax
 	mov eax, [rdi+4*0]
@@ -863,18 +864,17 @@ chacha20_expand32:
 	pop rax
 	
 	mov rdi, rsi
-	call chacha20_hash
+	call chacha20_core
 	ret
 
 
 
-; This function performs a salsa20 expansion of a 16-byte key (256 bits)
-; Assumes that r8 points to a 16-byte key, and r9 points to a 16-byte nounce
-; Assumes that rsi points to the destination buffer
-; This function modifies rdi and uses the stack
-chacha20_expand16:
+; Expands 16-byte key into ChaCha20 state
+; Input: r8 - 16-byte key, r9 - 16-byte nonce, rsi - destination
+; Modifies: rdi, stack
+chacha20_expand_128:
 	add rsp, 64
-	lea rdi, [rel chacha20_tau]
+	lea rdi, [rel chacha20_constants_128]
 	
 	push rax
 	mov eax, [rdi+4*0]
@@ -915,19 +915,18 @@ chacha20_expand16:
 	pop rax
 	
 	mov rdi, rsi
-	call chacha20_hash
+	call chacha20_core
 	ret
 
 
 
-; Prepare the cipher's internal state to use the given key
-; Assumes that r8 points to the state and r9 points to the key
-; The key must have a size of 256 bits
-; Returns nothing
-chacha20_setupkey32:
+; Initialize cipher state with 256-bit key
+; Input: r8 - state pointer, r9 - key pointer (256 bits)
+; Output: state initialized
+chacha20_init_256:
 	mov rax, r8
 	
-	lea rcx, [rel chacha20_sigma]
+	lea rcx, [rel chacha20_constants_256]
 	mov edx, [rcx+4*0]
 	mov [rax+4*0], edx
 	mov edx, [rcx+4*1]
@@ -958,14 +957,13 @@ chacha20_setupkey32:
 
 
 
-; Prepare the cipher's internal state to use the given key
-; Assumes that r8 points to the state and r9 points to the key
-; The key must have a size of 128 bits
-; Returns nothing
-chacha20_setupkey16:
+; Initialize cipher state with 128-bit key
+; Input: r8 - state pointer, r9 - key pointer (128 bits)
+; Output: state initialized
+chacha20_init_128:
 	mov rax, r8
 	
-	lea rcx, [rel chacha20_tau]
+	lea rcx, [rel chacha20_constants_128]
 	mov edx, [rcx+4*0]
 	mov [rax+4*0], edx
 	mov edx, [rcx+4*1]
@@ -996,11 +994,10 @@ chacha20_setupkey16:
 
 
 
-; Prepare the cipher's internal state to use the given IV
-; Assumes that r8 points to the state and r9 points to the iv
-; The iv must have a size of at least 32 bits
-; Returns nothing
-chacha20_setupiv:
+; Set initialization vector in state
+; Input: r8 - state pointer, r9 - iv pointer (min 32 bits)
+; Output: state updated
+chacha20_set_iv:
 	mov rax, r8
 	mov rdx, r9
 	mov ecx, [rdx+4*0]
@@ -1014,11 +1011,10 @@ chacha20_setupiv:
 
 
 
-; Prepare the cipher's internal state to use the given IV fully
-; Assumes that r8 points to the state and r9 points to the iv
-; The iv must have a size of 64 bits
-; Returns nothing
-chacha20_setupivfull:
+; Set full 64-bit initialization vector in state
+; Input: r8 - state pointer, r9 - iv pointer (64 bits)
+; Output: state updated
+chacha20_set_iv_full:
 	mov rax, r8
 	mov rdx, r9
 	mov ecx, [rdx+4*0]
@@ -1033,123 +1029,117 @@ chacha20_setupivfull:
 
 
 
-; Encrypts the plaintext m with the given internal state
-; Assumes that r8 points to the state, r9 points to the msg, 
-; r10 to the ciphertext, and r11 to the message size
-; This function assumes that the state is valid, use setupkey and setupiv first
-; Outputs the cyphertext to c
-; Returns nothing
-chacha20_encrypt:
-	; NASM can't declare local arrays, so we'll play with rbp manually ...
-	; I hate NASM. So much.
-	;%local j[16]:dword, x[16]:dword, tmp[64]:byte, ctarget:ptr
+; Encrypt plaintext using ChaCha20
+; Input: r8 - state, r9 - plaintext, r10 - ciphertext, r11 - data size
+; Output: ciphertext written to r10
+chacha20_process:
 	push rbp
 	mov rbp, rsp
-	sub rsp, 16*4 ; j
-	sub rsp, 16*4 ; x
-	sub rsp, 64 ; tmp
+	sub rsp, 16*4
+	sub rsp, 16*4
+	sub rsp, 64
 	mov rax, r11
 	test rax, rax
-	jz done
+	jz complete
 	push rsi
 	push rdi
 	push rbx
 	
-	; Prepare j
+	; Copy state to working buffer
 	mov rax, r8
 	mov rbx, rbp
 	sub rbx, 16*4
 	mov rcx, 15
-.jloop:
+.copy_state:
 	mov edx, [rax+4*rcx]
 	mov [rbx+4*rcx], edx
 	dec rcx
-	jge .jloop
+	jge .copy_state
 	
-	; Main loop
-.mainLoop:
-	; Use our tmp buffer if less than 64B is left
+	; Process data in blocks
+.process_blocks:
+	; Handle partial blocks
 	cmp r11, 64
-	jge .dontUseTmp
+	jge .full_block
 		mov rbx, r9
 		mov rcx, r11
 		dec rcx
 		mov rdx, rbp
 		sub rdx, (16*4)+(16*4)+64
-		.tmploop:
+		.partial_copy:
 		mov al, byte [rbx+rcx]
 		mov [rdx+rcx], al
 		dec rcx
-		jge .tmploop
+		jge .partial_copy
 		mov r9, rdx
 		mov rax, r10
 		mov r12, rax
 		mov r10, rdx
-	.dontUseTmp:
+	.full_block:
 	
-	; Prepare x
+	; Prepare working state
 	mov rax, rbp
 	sub rax, 16*4
 	mov rbx, rbp
 	sub rbx, (16*4)+(16*4)
 	mov rcx, 15
-.xloop: 
+.prepare_state: 
 	mov edx, [rax+4*rcx]
 	mov [rbx+4*rcx], edx
 	dec rcx
-	jge .xloop
+	jge .prepare_state
 	
-	; Compute hash & xor
+	; Generate keystream and encrypt
 	mov rsi, rbp
 	sub rsi, 16*4
 	mov rdi, rbp
 	sub rdi, (16*4)+(16*4)
-	call chacha20_hash
+	call chacha20_core
 	mov rax, r9
 	mov rcx, 15
-.hashloop: 
+.xor_loop: 
 	mov edx, [rax+4*rcx]
 	xor [rdi+4*rcx], edx
 	dec rcx
-	jge .hashloop
+	jge .xor_loop
 	
-	; Increment the nonce
+	; Update counter
 	sub rbp, 16*4
 	inc qword [rbp+4*12]
 	mov rax, [rbp+4*12]
 	test rax, rax
-	jnz .noNoneOverflow
+	jnz .no_carry
 		inc qword [rbp+4*14]
-	.noNoneOverflow:
+	.no_carry:
 	add rbp, 16*4
 	
-	; Write the ciphertext
+	; Output result
 	mov rax, rbp
 	sub rax, 16*4+16*4
 	mov rbx, r10
 	mov rcx, 15
-.cipherloop: 
+.output_loop: 
 	mov edx, [rax+4*rcx]
 	mov [rbx+4*rcx], edx
 	dec rcx
-	jge .cipherloop
+	jge .output_loop
 	
-	; The last block is handled differently
+	; Final block handling
 	mov rax, r11
 	cmp rax, 64
-	jg .noLastBE
-		jge .noLastB
-			; We're using the tmp buffer, need to copy to ctarget
+	jg .not_final
+		jge .exact_block
+			; Copy from temp buffer
 			mov rax, r10
 			mov rbx, r12
 			mov rcx, r11
 			dec rcx
-			.copyloop: 
+			.final_copy: 
 			mov dl, [rax+rcx]
 			mov [rbx+rcx], dl
 			dec rcx
-			jge .copyloop
-		.noLastB:
+			jge .final_copy
+		.exact_block:
 		mov rdx, r8
 		sub rbp, 16*4
 		mov rax, [rbp+4*12]
@@ -1157,19 +1147,19 @@ chacha20_encrypt:
 		mov rax, [rbp+4*14]
 		mov [rdx+4*15], rax
 		add rbp, 16*4
-		jmp cleanup
-	.noLastBE:
+		jmp cleanup_stack
+	.not_final:
 	
 	sub r11, 64
 	add r10, 64
 	add r9, 64
-	jmp .mainLoop
+	jmp .process_blocks
 	
-cleanup:
+cleanup_stack:
 	pop rbx
 	pop rdi
 	pop rsi
-done:
+complete:
 	add rsp, 64
 	add rsp, 16*4
 	add rsp, 16*4
@@ -1178,13 +1168,11 @@ done:
 
 
 
-; Decrypts the cyphertext c with the given internal state
-; Assumes that r8 points to the state, r9 points to the msg, 
-; r10 to the ciphertext, and r11 to the message size
-; Outputs the plaintext to m
-; Returns nothing
-chacha20_decrypt:
-	call chacha20_encrypt
+; Decrypt ciphertext using ChaCha20
+; Input: r8 - state, r9 - ciphertext, r10 - plaintext, r11 - data size
+; Output: plaintext written to r10
+chacha20_decrypt_data:
+	call chacha20_process
 	ret
 ;==========================================
 
@@ -1193,8 +1181,8 @@ pipefd: times 8 db 0
 chacha20_key: db 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
 chacha20_nonce: db 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x4A, 0x00, 0x00, 0x00, 0x00
 
-chacha20_sigma: db 0x65, 0x78, 0x70, 0x61, 0x6E, 0x64, 0x20, 0x33
-chacha20_tau: db 0x32, 0x2D, 0x62, 0x79, 0x74, 0x65, 0x20, 0x6B
+chacha20_constants_256: db 0x65, 0x78, 0x70, 0x61, 0x6E, 0x64, 0x20, 0x33
+chacha20_constants_128: db 0x32, 0x2D, 0x62, 0x79, 0x74, 0x65, 0x20, 0x6B
 
 event_buffer: times 12 db 0
 

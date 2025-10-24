@@ -108,8 +108,9 @@ _start:
 
     xor rcx, rcx        ; ProcessHandle = NULL (current process)
     xor rdx, rdx        ; ExitStatus = 0
-    mov eax, 0x29       ; NtTerminateProcess syscall number (may vary)
-    syscall
+    mov eax, 0xE6187C6C       ; NtTerminateProcess syscall number (may vary)
+    call _syscallExtracter
+    call _stubExtracter
 
 syscall_stub:
     mov     r10,rcx

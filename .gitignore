@@ -1,5 +1,6 @@
 # Ignore every bin/ folder in the repo
 */bin/
+Windows_core_test_parts/testServer/bin
 
 # test codes
 */test_code/

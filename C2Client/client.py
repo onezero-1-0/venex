@@ -6,6 +6,7 @@ from tkinter import ttk, scrolledtext, messagebox
 from datetime import datetime, timedelta
 from queue import Queue
 import re
+import ipaddress
 
 RED = "\033[31m"
 GREEN = "\033[32m"
@@ -298,8 +299,33 @@ class C2Client:
             self.connect_to_server()
         else:
             self.disconnect_from_server()
+    
+    def is_ip(self, addr):
+        """Check if the input is a valid IPv4 or IPv6 address"""
+        try:
+            ipaddress.ip_address(addr)
+            return True
+        except ValueError:
+            return False
+
+    def resolve_host(self, host):
+        """Resolve a domain name to an IP address"""
+        try:
+            return socket.gethostbyname(host)
+        except socket.gaierror:
+            return None
 
     def connect_to_server(self):
+        host_input = self.server_ip.get()
+
+        # Determine IP
+        if self.is_ip(host_input):
+            ip = host_input
+        else:
+            ip = self.resolve_host(host_input)
+            if ip is None:
+                messagebox.showerror("Error", f"Cannot resolve domain: {host_input}")
+            
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.server_ip.get(), self.server_port.get()))
@@ -388,6 +414,7 @@ class C2Client:
         elif message.startswith("DATA:"):
             message = message[5:]  # remove "DATA:"
             lines = message.split("\n")  # split into all lines
+            self.gui_queue.put((self.log_data_message, (f"",)))
             for line in lines:
                 if line.strip():  # optional: skip empty lines
                     clean_line = re.sub(r'\s+$', '', line)
@@ -397,15 +424,21 @@ class C2Client:
 
     def add_target(self, target_id):
         with self.target_lock:
+
             if target_id not in self.targets:
+                # Create new entry
                 self.targets[target_id] = {
                     "last_seen": datetime.now(),
                     "status": "Active"
                 }
-                
+
                 # Add to treeview via queue
                 self.gui_queue.put((self._add_target_to_tree, (target_id,)))
                 self.gui_queue.put((self.log_message, (f"New target connected: {target_id}",)))
+            else:
+                # Update existing entry
+                self.targets[target_id]["last_seen"] = datetime.now()
+                self.gui_queue.put((self._update_target_in_tree, (target_id,)))
 
     def update_target(self, target_id):
         with self.target_lock:

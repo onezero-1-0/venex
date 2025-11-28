@@ -71,7 +71,6 @@ typedef struct _KERNEL32_TABLE {
     WIN_API_FUNC(VirtualFree, BOOL, LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType);
     WIN_API_FUNC(VirtualProtect, BOOL, LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);
     WIN_API_FUNC(GetProcessHeap, HANDLE, VOID);
-    WIN_API_FUNC(Sleep, VOID, DWORD dwMilliseconds);
     WIN_API_FUNC(CreateProcessA, BOOL, LPCSTR lpApplicationName, LPSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment, LPCSTR lpCurrentDirectory, LPSTARTUPINFOA lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation);
     WIN_API_FUNC(CreatePipe, BOOL, PHANDLE hReadPipe, PHANDLE hWritePipe, LPSECURITY_ATTRIBUTES lpPipeAttributes, DWORD nSize);
     WIN_API_FUNC(SetHandleInformation, BOOL, HANDLE hObject, DWORD dwMask, DWORD dwFlags);
@@ -92,6 +91,7 @@ typedef struct _WINGOST_TABLE {
     CUSTOM_FUNC(gostSend, void, char* message, int message_len, const wchar_t* apiID, PFUNCTION_TABLE ft);
     CUSTOM_FUNC(gostPrint, void, char* message, BOOL format, int message_len, PFUNCTION_TABLE ft);
     CUSTOM_FUNC(gostExecute, BOOL, char* command, char* output, DWORD outputSize, PFUNCTION_TABLE ft);
+    CUSTOM_FUNC(gostSleep, int, BOOL Alertable, int DelayInterval); //DelayInterval take seconds , Alertable = FALSE
 
 } WINGOST_TABLE, *PWINGOST_TABLE;
 

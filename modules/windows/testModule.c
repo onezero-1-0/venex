@@ -22,6 +22,8 @@ void PrintModule(PFUNCTION_TABLE ft) {
         return;
     }
 
+    ft->WinGost.gostSend(output, (int)size, NULL, ft);
+
     // ft->Kernel32.WriteConsoleA(
     //         ft->Kernel32.GetStdHandle(-11), // STD_OUTPUT_HANDLE
     //         output,

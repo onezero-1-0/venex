@@ -93,6 +93,12 @@ dealy:
 	;=====BACKOBUF=======
 
 
+
+
+
+
+
+
 ;This is beconing For C2
 
 	;========OBUF========
@@ -654,7 +660,7 @@ gostSendBuf:
 	times 520 db 0x00;gostsend
 
 timespec:
-    dq 10          ; tv_sec = 2 seconds
+    dq 30          ; tv_sec = 2 seconds
     dq 000000000  ; tv_nsec = 500,000,000 ns = 0.5 s
 
 api_table:

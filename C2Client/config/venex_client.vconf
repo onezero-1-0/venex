@@ -1,0 +1,4 @@
+# Venex C2 Client Configuration
+auth_token=d3b3763b3cdf08c852cd51a6d98188677601b6f3229a9689e8369445c1ca17c0
+server_ip=143.198.194.12
+server_port=7777

@@ -28,18 +28,18 @@ chacha20_Full:
 	push rbp
 	mov rbp,rsp
 
-	mov rdi,rcx
-	mov r14,rdx
-	mov r15,r8
-    mov r8,[rel chacha20_state]
-    mov r9,[rel chacha20_key]
+	;mov rdi,rdi ;first arg is input message pointer
+	mov r14,rsi ;second arg is output message pointer
+	mov r15,rdx ;third arg is length of message
+    lea r8,[rel chacha20_state]
+    lea r9,[rel chacha20_key]
     call chacha20_init_256
-    mov r8,[rel chacha20_state]
-    mov r9,[rel chacha20_nonce]
+    lea r8,[rel chacha20_state]
+    lea r9,[rel chacha20_nonce]
     call chacha20_set_iv
 
     ;encrypt
-    mov r8,[rel chacha20_state]
+    lea r8,[rel chacha20_state]
     mov r9,rdi ;message
     mov r10,r14
     mov r11,r15

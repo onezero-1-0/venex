@@ -350,7 +350,7 @@ int decode_to_file(char filename[4][512], LPCSTR username, PFUNCTION_TABLE ft) {
         if (readBytes == 0) {
             ft->Kernel32.VirtualFree(encoded_data, 0, MEM_RELEASE);
             ft->Kernel32.VirtualFree(decoded_data, 0, MEM_RELEASE);
-            return -1;
+            return -2;
         }
         total_size += readBytes;
     }

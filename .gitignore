@@ -7,6 +7,6 @@ gostInit/windows/lib/bin/
 */test_code/
 *test/
 testing*
-
+*/gostinit/windows/*
 #vscode stuff
 .vscode

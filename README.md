@@ -128,7 +128,7 @@ Not yet licensed — project is still in development. Public forks are allowed o
 /C2Client # Python client: connects to server and maintains targets
 /tools/ # Main tooling for building/encrypting/obfuscating/hashing payloads
 /gostinit # Core malware dropper/loader for Win_x64 (limited stealth)
-/modules # Default modules (small shell access modules, helpers, etc.)
+/modules # Default modules
 /moduloScript # Chain multiple modules together
 /server/ # Server: handles clients and target bridging
 
@@ -157,7 +157,7 @@ For more details, see [docs/createmodule.md](docs/createmodule.md).
 
 ## ModuloScript
 
-ModuloScript is a way to run multiple commands at once or reuse long commands like aliases. Put commands you want line by line.
+ModuloScript is a way to run multiple commands at once or reuse long commands like aliases. crate a .vms file in moduloScript folder and Put commands you want line by line. then use it name with $ as a command in client.(ex: - $myscript)
 
 ---
 

@@ -325,9 +325,9 @@ create-client:
 	@echo "$(BLUE)  → Created $(CLIENT_DIR)/content_box$(NC)"
 	@mkdir -p $(CLIENT_DIR)/config
 	@echo "$(BLUE)  → Created $(CLIENT_DIR)/config$(NC)"
-	@cp client/client.py $(CLIENT_DIR)/
+	@cp C2Client/client.py $(CLIENT_DIR)/
 	@echo "$(BLUE)  → Copied client.py$(NC)"
-	@cp client/config/* $(CLIENT_DIR)/config/
+	@cp C2Client/config/* $(CLIENT_DIR)/config/
 	@echo "$(BLUE)  → Copied config files$(NC)"
 	@echo "$(GREEN)[✓]$(NC) Client structure created"
 

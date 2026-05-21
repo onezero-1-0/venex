@@ -110,7 +110,7 @@ Not yet licensed — project is still in development. Public forks are allowed o
 
 **Venex** is a C2 framework (v1.5) for creating and managing modules, shellcode, and encrypted payloads. It supports team collaboration using a server–client architecture. This early release provides a minimal toolset for building, obfuscating, and distributing small payload modules. Some functionality is intentionally limited while the project is under development.
 
-**Installation Guide:** For full installation steps, see [Installation Guide](docs/INSTALL.md).
+**Installation & Usage Guide:** For full installation steps and Usage, see [Installation & Usage Guide](docs/INSTALL.md).
 
 ---
 
@@ -141,7 +141,8 @@ Not yet licensed — project is still in development. Public forks are allowed o
 | Tool | Description | Notes |
 |------|-------------|-------|
 | `encrypt.exe` | Encrypt / decrypt data (ChaCha20) | Used to secure modules and communications |
-| `windows_gost_tools/ntdllHashGenerator/hash.py` | Generate syscall hashes | Generates hashes for syscall numbers used by gost shellcode |
+| `ntdllHashGenerator.py` | Generate syscall hashes | Generates hashes for syscall numbers used by gost shellcode |
+| `subdomainGenerating.py` | Generate subdomain base on date | this used to find which subdomain shuld server host in current date |
 
 *Limited tools are available for now.*
 
@@ -165,7 +166,7 @@ ModuloScript is a way to run multiple commands at once or reuse long commands li
 
 - Keep modules small and focused (single-responsibility). Large functionality should be split across multiple modules.
 - Test modules thoroughly in a sandbox or isolated network before any remote execution.
-- Use `hash.py` to compute syscall hashes consistently across builds.
+- Use `ntdllHashGenerator.py` to compute syscall hashes consistently across builds.
 
 ---
 
@@ -173,12 +174,11 @@ ModuloScript is a way to run multiple commands at once or reuse long commands li
 
 **Attack Vector (C2 Infrastructure):**
 - **C2 Server:** Runs on Linux (`server` in `/server/bin`)
-- **Tools:** `encrypt.exe` and `hash.py` in `/tools` are Windows executables
 - **Client:** Python-based (`/C2Client`), cross-platform (Windows, Linux, macOS with Python 3)
 
 **Target (Malware):**
 - **Operating System:** Windows x86_64 (10/11 compatible)
-- **Components:** `gostinit` (dropper/loader) and modules (e.g., `tm.bin`) are built for Windows
+- **Components:** `gostinit` (dropper/loader) and modules (e.g., `shell`) are built for Windows
 
 **Build Environment:**
 - *To be added later*

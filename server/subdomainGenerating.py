@@ -31,7 +31,7 @@ def generate_subdomains_by_date(count):
             else:
                 name.append(chr(ord('0') + (r - 52)))
 
-        subdomains.append("".join(name) + ".duckdns.org")
+        subdomains.append("".join(name) + ".yourdomain.TLD")
 
     return subdomains
 

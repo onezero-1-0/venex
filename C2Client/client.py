@@ -432,8 +432,16 @@ class PremiumC2Client(ctk.CTk):
             # Build full file path
             full_filename = f"content_box/{filename}.{extension}"
 
-            # Write binary data to file
-            with open(full_filename, "wb") as f:
+            base, ext = os.path.splitext(full_filename)
+            counter = 1
+
+            new_filename = full_filename
+
+            while os.path.exists(new_filename):
+                new_filename = f"{base}_{counter}{ext}"
+                counter += 1
+
+            with open(new_filename, "wb") as f:
                 f.write(file_data)
 
             self.gui_queue.put((self.log_message, (f"$$-> Received file: {full_filename} saved",)))

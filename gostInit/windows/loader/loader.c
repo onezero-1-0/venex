@@ -1,4 +1,4 @@
-#include "../includes/loader.h"
+#include "loader.h"
 
 char namesoffunc[20];
 

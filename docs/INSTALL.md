@@ -27,7 +27,7 @@ This guide provides step-by-step instructions to set up and build the VENEX C2 p
    ```
 2. Run the Makefile with sudo and set your primary domain to build the project:
    ```bash
-   sudo make PRIMARY_DOMAIN=yourdomain.TLD
+   sudo make DOMAIN=yourdomain.TLD
    ```
    - Replace `yourdomain.TLD` with your actual domain (e.g., `example.com`).
    - The Makefile will handle all compilation, obfuscation, and setup steps automatically.

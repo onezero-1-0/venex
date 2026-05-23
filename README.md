@@ -125,12 +125,12 @@ Not yet licensed — project is still in development. Public forks are allowed o
 ---
 
 ## Repository Structure
-/C2Client # Python client: connects to server and maintains targets
-/tools/ # Main tooling for building/encrypting/obfuscating/hashing payloads
-/gostinit # Core malware dropper/loader for Win_x64 (limited stealth)
-/modules # Default modules
-/moduloScript # Chain multiple modules together
-/server/ # Server: handles clients and target bridging
+- /`C2Client` # Python client: connects to server and maintains targets
+- /`tools` # Main tooling for building/encrypting/obfuscating/hashing payloads
+- /`gostinit` # Core malware dropper/loader for Win_x64 (limited stealth)
+- /`modules` # Default modules
+- /`moduloScript` # Chain multiple modules together
+- /`server` # Server: handles clients and target bridging
 
 > **Note:** The server and victim use encrypted connections. The server will encrypt modules automatically.
 

@@ -1,1 +1,1 @@
-tm powershell -command "systeminfo | select-string 'OS Name','OS Version','System Type','Total Physical Memory'"
+shell powershell -command "systeminfo | select-string 'OS Name','OS Version','System Type','Total Physical Memory'"

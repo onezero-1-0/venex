@@ -165,15 +165,15 @@ char *bytes_to_hex(const unsigned char *buf, size_t len) {
 // Cross-platform file path handling
 void get_module_path(const char *moduleName, char *path, size_t path_size) {
 #ifdef _WIN32
-    snprintf(path, path_size, "D:\\linuxmal\\modules\\bin\\%s.bin", moduleName);
+    snprintf(path, path_size, "modules\\%s.bin", moduleName);
 #else
-    snprintf(path, path_size, "./modules/bin/%s.bin", moduleName);
+    snprintf(path, path_size, "./modules/%s.bin", moduleName);
 #endif
 }
 
 void get_script_path(const char *scriptName, char *path, size_t path_size) {
 #ifdef _WIN32
-    snprintf(path, path_size, "D:\\linuxmal\\moduloScript\\%s.vms", scriptName);
+    snprintf(path, path_size, "moduloScript\\%s.vms", scriptName);
 #else
     snprintf(path, path_size, "./moduloScript/%s.vms", scriptName);
 #endif

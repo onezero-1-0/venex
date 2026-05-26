@@ -22,24 +22,24 @@ section .text
 	global chacha20_Full
 
 chacha20_Full:
-	;rdi is message pointer
-	;r14 is length of message
-	;key nouce are already setups we only need rdi and r14
+	;rdi is input pointer
+	;r14 is output pointer
+	;r15 is data size
 	push rbp
 	mov rbp,rsp
 
 	mov rdi,rcx
 	mov r14,rdx
 	mov r15,r8
-    mov r8,[rel chacha20_state]
-    mov r9,[rel chacha20_key]
+    lea r8,[rel chacha20_state] 
+    lea r9,[rel chacha20_key]
     call chacha20_init_256
-    mov r8,[rel chacha20_state]
-    mov r9,[rel chacha20_nonce]
+    lea r8,[rel chacha20_state]
+    lea r9,[rel chacha20_nonce]
     call chacha20_set_iv
 
     ;encrypt
-    mov r8,[rel chacha20_state]
+    lea r8,[rel chacha20_state]
     mov r9,rdi ;message
     mov r10,r14
     mov r11,r15
@@ -555,5 +555,3 @@ complete:
 chacha20_decrypt_data:
 	call chacha20_process
 	ret
-
-section .note.GNU-stack noalloc noexec nowrite progbits

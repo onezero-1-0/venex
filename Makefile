@@ -168,15 +168,14 @@ NC = \033[0m
 install-deps:
 	@echo "$(YELLOW)[1/17]$(NC) Installing dependencies..."
 	@echo "$(BLUE)  → Installing mingw-w64...$(NC)"
-	@apt install mingw-w64 -y || echo "$(RED)  ✗ Failed to install mingw-w64$(NC)"
+	@sudo apt install mingw-w64 -y || echo "$(RED)  ✗ Failed to install mingw-w64$(NC)"
 	@echo "$(BLUE)  → Installing nasm...$(NC)"
-	@apt install nasm -y || echo "$(RED)  ✗ Failed to install nasm$(NC)"
+	@sudo apt install nasm -y || echo "$(RED)  ✗ Failed to install nasm$(NC)"
 	@echo "$(BLUE)  → Installing gcc...$(NC)"
-	@apt install gcc -y || echo "$(RED)  ✗ Failed to install gcc$(NC)"
+	@sudo apt install gcc -y || echo "$(RED)  ✗ Failed to install gcc$(NC)"
 	@echo "$(BLUE)  → Installing perl...$(NC)"
-	@apt install perl -y || echo "$(RED)  ✗ Failed to install perl$(NC)"
+	@sudo apt install perl -y || echo "$(RED)  ✗ Failed to install perl$(NC)"
 	@echo "$(GREEN)[✓]$(NC) Dependencies installed"
-	@exit
 
 # Step 2: Clean previous builds
 clean:
